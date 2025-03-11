@@ -11,17 +11,16 @@ const template = [
         click: (menuItem, browserWindow) => {
           if (browserWindow) {
             browserWindow.webContents.executeJavaScript(`
-              let codeElement = document.querySelector('.CodeMirror-code');
-              let text = '';
-              if (codeElement) {
-                text = codeElement.textContent;
-              }
-                console.log(text);
-            `)/*.then(text => {
+              (() => {
+                const editorElement = document.querySelector('.CodeMirror-code');
+                const extractedText = editorElement ? editorElement.textContent : '';
+                return extractedText;
+              })()
+            `).then(text => {
               if (text) {
                 clipboard.writeText(text);
               }
-            });*/
+            });
           }
         }
       },
