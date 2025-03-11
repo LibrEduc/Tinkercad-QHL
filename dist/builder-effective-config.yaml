@@ -7,6 +7,6 @@ win:
   target:
     - portable
   defaultArch: x64
-  icon: autodesk-tinkercad.png
+  icon: build/autodesk-tinkercad.png
 files: []
 electronVersion: 35.0.1

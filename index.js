@@ -38,7 +38,7 @@ const template = [
             `).then(text => {
                             if (text) {
                                 clipboard.writeText(text);
-                                showNotification(browserWindow, 'Code copié dans le presse papier');
+                                showNotification(browserWindow, 'Code copié dans le presse-papier');
                             }
                         });
                     }
@@ -87,6 +87,7 @@ function createWindow() {
     const mainWindow = new BrowserWindow({
         width: 1200,
         height: 800,
+        icon: path.join(__dirname, 'autodesk-tinkercad.png'),
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -154,6 +155,7 @@ function showNotification(browserWindow, notificationText) {
     const logoDataUrl = `data:image/png;base64,${logoBase64}`;
     console.log('Logo loaded as data URL');
     notificationWindow.loadURL(`data:text/html,
+    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
     <html>
       <body style="
         margin: 0;
