@@ -14,7 +14,8 @@
   "description": "",
   "devDependencies": {
     "electron": "^35.0.1",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "sharp": "^0.33.5"
   },
   "build": {
     "appId": "com.tinkercad.desktop",
@@ -23,7 +24,9 @@
       "output": "dist"
     },
     "win": {
-      "target": ["portable"],
+      "target": [
+        "portable"
+      ],
       "defaultArch": "x64",
       "icon": "autodesk-tinkercad.png"
     }
