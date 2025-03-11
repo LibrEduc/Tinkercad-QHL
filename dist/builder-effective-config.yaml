@@ -1,0 +1,12 @@
+directories:
+  output: dist
+  buildResources: build
+appId: com.tinkercad.desktop
+productName: Tinkercad Desktop
+win:
+  target:
+    - portable
+  defaultArch: x64
+  icon: autodesk-tinkercad.png
+files: []
+electronVersion: 35.0.1
