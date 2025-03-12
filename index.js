@@ -13,9 +13,16 @@ function loadTranslations(locale) {
     }
 }
 
-// Get system locale or fallback to English
-const systemLocale = app.getLocale().split('-')[0];
-const translations = loadTranslations(systemLocale) || loadTranslations('en');
+// Get system locale and handle language code extraction
+const rawLocale = app.getLocale();
+const systemLocale = rawLocale ? rawLocale.split('-')[0] : 'en';
+let translations = loadTranslations(systemLocale);
+
+// Only fallback to English if the translation file doesn't exist or is invalid
+if (!translations) {
+    console.log(`No translations found for ${systemLocale}, falling back to English`);
+    translations = loadTranslations('en');
+}
 
 // Create custom menu template
 const t = translations.menu;
@@ -162,6 +169,8 @@ app.whenReady().then(() => {
             createWindow();
         }
     });
+    
+    switchLanguage(app.getLocale());
 });
 
 app.on('window-all-closed', function () {
