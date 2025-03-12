@@ -15,7 +15,7 @@ const template = [
               (() => {
                 const editorElement = document.querySelector('.CodeMirror-code');
                 if (!editorElement) 
-                    browserWindow.webContents.showNotification(browserWindow, 'Ouvrir le texte du programme');
+                    return 'empty';
                 
                 // Clone the element to avoid modifying the original DOM
                 const clonedElement = editorElement.cloneNode(true);
@@ -33,13 +33,23 @@ const template = [
                   .join('\\r\\n');
                 
                 // Get the clean text content
+                if (codeText != '' && codeText != 'undefined') {
+                    return codeText;
+                } else {
+                    return 'empty';
+                }
                 return codeText;
               })()
             `).then(text => {
-                            if (text) {
+                            if (text != 'empty') {
                                 clipboard.writeText(text);
                                 showNotification(browserWindow, 'Code copié dans le presse-papier');
+                            } else {
+                                showNotification(browserWindow, 'Ouvrir le volet de programme textuel pour copier le code');
                             }
+                        }).catch(error => {
+                            console.error('Error copying code:', error);
+                            showNotification(browserWindow, 'Erreur lors de la copie du code');
                         });
                     }
                 }
