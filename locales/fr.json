@@ -25,7 +25,8 @@
       "label": "Lister les cartes disponibles",
       "notifications": {
         "noPorts": "Aucune carte Arduino trouvée",
-        "error": "Erreur lors de la liste des cartes Arduino"
+        "error": "Erreur lors de la liste des cartes Arduino",
+        "portSelected": "Port sélectionné : {port}"
       }
     },
     "view": {
@@ -37,6 +38,9 @@
       "zoomOut": "Zoom arrière",
       "toggleFullscreen": "Basculer en plein écran",
       "toggleDevTools": "Outils de développement"
+    },
+    "arduino": {
+      "label": "Arduino"
     },
     "help": {
       "label": "Aide",

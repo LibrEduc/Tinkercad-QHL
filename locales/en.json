@@ -25,7 +25,8 @@
       "label": "List available boards",
       "notifications": {
         "noPorts": "No Arduino boards found",
-        "error": "Error listing Arduino boards"
+        "error": "Error listing Arduino boards",
+        "portSelected": "Selected port: {port}"
       }
     },
     "view": {
@@ -37,6 +38,9 @@
       "zoomOut": "Zoom Out",
       "toggleFullscreen": "Toggle Fullscreen",
       "toggleDevTools": "Toggle Developer Tools"
+    },
+    "arduino": {
+      "label": "Arduino"
     },
     "help": {
       "label": "Help",

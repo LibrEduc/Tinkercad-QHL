@@ -50,6 +50,16 @@ const template = [
             { type: 'separator' },
             { role: 'quit', label: t.file.quit }
         ]
+    },
+    {
+        label: t.arduino.label,
+        icon: path.join(__dirname, 'Arduino_IDE_logo.png'),
+        submenu: [
+            {
+                label: t.listPorts.label,
+                click: async (menuItem, browserWindow) => listArduinoBoards(menuItem, browserWindow, t, template)
+            }
+        ]
     }
 ];
 
@@ -97,6 +107,7 @@ app.whenReady().then(() => {
 
     // Initial language setup
     switchLanguage(app.getLocale());
+    listArduinoBoards(loadTranslations(app.getLocale()).menu, browserWindow, t, template);
 });
 
 app.on('window-all-closed', function () {
@@ -104,6 +115,61 @@ app.on('window-all-closed', function () {
         app.quit();
     }
 });
+
+function listArduinoBoards(menuItem, browserWindow, t, template) {
+    const { exec } = require('child_process');
+    const arduinoCliPath = path.join(__dirname, './arduino/arduino-cli.exe');
+    exec(`"${arduinoCliPath}" board list`, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`Error listing boards: ${error}`);
+            showNotification(browserWindow, t.listPorts.notifications.error);
+            return;
+        }
+
+        // Parse the output to extract Port and Board Name
+        const lines = stdout.split('\n');
+        const boards = lines
+            .slice(1) // Skip header line
+            .filter(line => line.trim()) // Remove empty lines
+            .map(line => {
+                const parts = line.split(/\s+/);
+                const port = parts[0];
+                let boardName = parts[5];
+                if (parts[6] !== undefined) {
+                    boardName += ' ' + parts[6];
+                }
+                return { port, boardName };
+            });
+
+        if (boards.length > 0) {
+            // Create submenu items for each board
+            const portsSubmenu = boards.map(board => ({
+                label: `${board.port} - ${board.boardName}`,
+                type: 'radio',
+                checked: selectedPort === board.port,
+                click: () => {
+                    selectedPort = board.port;
+                    showNotification(browserWindow, t.listPorts.notifications.portSelected.replace('{port}', board.port));
+                }
+            }));
+
+            // Update the Arduino menu to include the ports submenu
+            const arduinoMenu = template.find(item => item.label === t.arduino.label);
+            if (arduinoMenu) {
+                arduinoMenu.submenu = [
+                    {
+                        label: t.listPorts.label,
+                        submenu: portsSubmenu
+                    }
+                ];
+                const newMenu = Menu.buildFromTemplate(template);
+                Menu.setApplicationMenu(newMenu);
+            }
+        } else {
+            showNotification(browserWindow, t.listPorts.notifications.noPorts);
+        }
+    });
+}
 
 function switchLanguage(locale) {
     // Load new translations
@@ -115,6 +181,55 @@ function switchLanguage(locale) {
         {
             label: t.file.label,
             submenu: [
+                {
+                    label: t.copyCode.label,
+                    accelerator: 'CommandOrControl+Alt+C',
+                    click: (menuItem, browserWindow) => {
+                        if (browserWindow) {
+                            browserWindow.webContents.executeJavaScript(`
+                          (() => {
+                            const editorElement = document.querySelector('.CodeMirror-code');
+                            if (!editorElement) 
+                                return 'empty';
+                            
+                            // Clone the element to avoid modifying the original DOM
+                            const clonedElement = editorElement.cloneNode(true);
+                            
+                            // Remove all gutter wrapper elements from the clone
+                            const gutterWrappers = clonedElement.querySelectorAll('.CodeMirror-gutter-wrapper');
+                            gutterWrappers.forEach(wrapper => wrapper.remove());
+                            
+                            // Get all pre elements (each represents a line of code)
+                            const preElements = clonedElement.querySelectorAll('pre');
+                            
+                            // Extract text from each pre element and join with newlines
+                            const codeText = Array.from(preElements)
+                              .map(pre => pre.textContent)
+                              .join('\\r\\n');
+                            
+                            // Get the clean text content
+                            if (codeText != '' && codeText != 'undefined') {
+                                return codeText;
+                            } else {
+                                return 'empty';
+                            }
+                            return codeText;
+                          })()
+                        `).then(text => {
+                                if (text != 'empty') {
+                                    clipboard.writeText(text);
+                                    showNotification(browserWindow, t.copyCode.notifications.success);
+                                } else {
+                                    showNotification(browserWindow, t.copyCode.notifications.empty);
+                                }
+                            }).catch(error => {
+                                console.error('Error copying code:', error);
+                                showNotification(browserWindow, t.copyCode.notifications.error);
+                            });
+                        }
+                    }
+                },
+                { type: 'separator' },
                 {
                     label: t.file.language,
                     submenu: [
@@ -137,89 +252,13 @@ function switchLanguage(locale) {
             ]
         },
         {
-            label: t.copyCode.label,
-            click: (menuItem, browserWindow) => {
-                if (browserWindow) {
-                    browserWindow.webContents.executeJavaScript(`
-                  (() => {
-                    const editorElement = document.querySelector('.CodeMirror-code');
-                    if (!editorElement) 
-                        return 'empty';
-                    
-                    // Clone the element to avoid modifying the original DOM
-                    const clonedElement = editorElement.cloneNode(true);
-                    
-                    // Remove all gutter wrapper elements from the clone
-                    const gutterWrappers = clonedElement.querySelectorAll('.CodeMirror-gutter-wrapper');
-                    gutterWrappers.forEach(wrapper => wrapper.remove());
-                    
-                    // Get all pre elements (each represents a line of code)
-                    const preElements = clonedElement.querySelectorAll('pre');
-                    
-                    // Extract text from each pre element and join with newlines
-                    const codeText = Array.from(preElements)
-                      .map(pre => pre.textContent)
-                      .join('\\r\\n');
-                    
-                    // Get the clean text content
-                    if (codeText != '' && codeText != 'undefined') {
-                        return codeText;
-                    } else {
-                        return 'empty';
-                    }
-                    return codeText;
-                  })()
-                `).then(text => {
-                                if (text != 'empty') {
-                                    clipboard.writeText(text);
-                                    showNotification(browserWindow, t.copyCode.notifications.success);
-                                } else {
-                                    showNotification(browserWindow, t.copyCode.notifications.empty);
-                                }
-                            }).catch(error => {
-                                console.error('Error copying code:', error);
-                                showNotification(browserWindow, t.copyCode.notifications.error);
-                            });
-                        }
-                    }
-        },
-        {
-            label: t.listPorts.label,
-            id: 'ports-menu',
-            click: async (menuItem, browserWindow) => {
-                const { exec } = require('child_process');
-                const arduinoCliPath = path.join(__dirname, './arduino/arduino-cli.exe');
-                exec(`"${arduinoCliPath}" board list`, (error, stdout, stderr) => {
-                    if (error) {
-                        console.error(`Error listing boards: ${error}`);
-                        showNotification(browserWindow, t.listPorts.notifications.error);
-                        return;
-                    }
-                    
-                    // Parse the output to extract Port and Board Name
-                    const lines = stdout.split('\n');
-                    const boardInfo = lines
-                        .slice(1) // Skip header line
-                        .filter(line => line.trim()) // Remove empty lines
-                        .map(line => {
-                            const parts = line.split(/\s+/);
-                            let boardInfo = parts[0] + ' ' + parts[5];
-                            if (parts[6] !== undefined) {
-                                boardInfo += ' ' + parts[6];
-                            }
-                            return boardInfo; // Return the port information
-                        })
-                        .join('\n');
-
-                    // Write the filtered information to com.txt and show notification
-                    if (boardInfo) {
-                        fs.writeFileSync('com.txt', boardInfo);
-                        showNotification(browserWindow, boardInfo);
-                    } else {
-                        showNotification(browserWindow, t.listPorts.notifications.noPorts);
-                    }
-                });
-            }
+            label: t.arduino.label,
+            submenu: [
+                {
+                    label: t.listPorts.label,
+                    click: async (menuItem, browserWindow) => listArduinoBoards(menuItem, browserWindow, t, template)
+                }
+            ]
         },
         {
             label: t.view.label,
