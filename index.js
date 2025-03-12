@@ -185,28 +185,33 @@ function switchLanguage(locale) {
         },
         {
             label: t.listPorts.label,
-            submenu: [],
-            id: 'ports-menu'
-        },
-        {
-            label: t.uploadCode.label,
+            id: 'ports-menu',
             click: async (menuItem, browserWindow) => {
-                if (selectedPort) {
-                    const { exec } = require('child_process');
-                    const arduinoCliPath = path.join(__dirname, './arduino/arduino-cli.exe');
-                    // Execute the Arduino CLI command
-                    exec(`"${arduinoCliPath}" upload -p ${selectedPort}`, (error, stdout, stderr) => {
-                        if (error) {
-                            console.error(`Error uploading code: ${error}`);
-                            showNotification(browserWindow, t.uploadCode.notifications.error);
-                            return;
-                        }
-                        console.log(`Code uploaded successfully: ${stdout}`);
-                        showNotification(browserWindow, t.uploadCode.notifications.success);
-                    });
-                } else {
-                    showNotification(browserWindow, t.uploadCode.notifications.noPort);
-                }
+                const { exec } = require('child_process');
+                const arduinoCliPath = path.join(__dirname, './arduino/arduino-cli.exe');
+                exec(`"${arduinoCliPath}" board list`, (error, stdout, stderr) => {
+                    if (error) {
+                        console.error(`Error listing boards: ${error}`);
+                        showNotification(browserWindow, t.listPorts.notifications.error);
+                        return;
+                    }
+                    
+                    // Parse the output to extract Port and Board Name
+                    const lines = stdout.split('\n');
+                    const boardInfo = lines
+                        .slice(1) // Skip header line
+                        .filter(line => line.trim()) // Remove empty lines
+                        .map(line => {
+                            const parts = line.split(/\s+/);
+                            return parts[0] + ' ' + parts[5] + ' ' + parts[6]; // Return only the port information
+                        })
+                        .join('\n');
+
+                    // Write the filtered information to com.txt
+                    if (boardInfo) {
+                        fs.writeFileSync('com.txt', boardInfo);
+                    }
+                });
             }
         },
         {
@@ -220,7 +225,6 @@ function switchLanguage(locale) {
                 { role: 'zoomOut', label: t.view.zoomOut },
                 { type: 'separator' },
                 { role: 'togglefullscreen', label: t.view.toggleFullscreen },
-                { type: 'separator' },
                 { role: 'toggleDevTools', label: t.view.toggleDevTools }
             ]
         },
@@ -231,7 +235,7 @@ function switchLanguage(locale) {
                     label: t.help.learnMore,
                     click: async () => {
                         const { shell } = require('electron');
-                        await shell.openExternal('https://www.tinkercad.com/learn')
+                        await shell.openExternal('https://www.tinkercad.com/learn/circuits');
                     }
                 }
             ]
@@ -239,63 +243,42 @@ function switchLanguage(locale) {
     ];
 
     // Build and set the new menu
-    const menu = Menu.buildFromTemplate(template);
-    Menu.setApplicationMenu(menu);
+    const newMenu = Menu.buildFromTemplate(template);
+    Menu.setApplicationMenu(newMenu);
 }
 
+function showNotification(browserWindow, message) {
+    if (browserWindow) {
+        browserWindow.webContents.executeJavaScript(`
+            (() => {
+                const notification = document.createElement('div');
+                notification.style.position = 'fixed';
+                notification.style.left = '50%';
+                notification.style.top = '50%';
+                notification.style.transform = 'translate(-50%, -50%)';
+                notification.style.backgroundColor = '#333';
+                notification.style.color = 'white';
+                notification.style.padding = '10px 20px';
+                notification.style.borderRadius = '5px';
+                notification.style.zIndex = '9999';
+                notification.style.opacity = '0';
+                notification.style.transition = 'opacity 0.3s ease-in-out';
+                notification.textContent = ${JSON.stringify(message)};
 
-function showNotification(browserWindow, notificationText) {
-    const notificationWindow = new BrowserWindow({
-        width: 500,
-        height: 80,
-        frame: false,
-        transparent: true,
-        alwaysOnTop: true,
-        skipTaskbar: true,
-        webPreferences: {
-            nodeIntegration: false,
-            contextIsolation: true
-        }
-    });
+                document.body.appendChild(notification);
 
-    // Position the notification window in the center of the main window
-    const mainBounds = browserWindow.getBounds();
-    const notificationBounds = notificationWindow.getBounds();
-    notificationWindow.setPosition(
-        mainBounds.x + Math.floor((mainBounds.width - notificationBounds.width) / 2),
-        mainBounds.y + Math.floor((mainBounds.height - notificationBounds.height) / 2)
-    );
+                // Trigger reflow
+                notification.offsetHeight;
 
-    const logoPath = path.join(__dirname, 'Arduino_IDE_logo.png');
-    const logoBase64 = fs.readFileSync(logoPath).toString('base64');
-    const logoDataUrl = `data:image/png;base64,${logoBase64}`;
-    console.log('Logo loaded as data URL');
-    notificationWindow.loadURL(`data:text/html,
-    <meta http-equiv="content-type" content="text/html; charset=utf-8" />
-    <html>
-      <body style="
-        margin: 0;
-        padding: 15px;
-        background: rgba(0, 0, 0, 0.7);
-        color: white;
-        font-family: Arial, sans-serif;
-        border-radius: 5px;
-        user-select: none;
-        -webkit-app-region: drag;
-      ">
-        <div style="display: flex; align-items: center;">
-          <img src="${logoDataUrl}" style="width: 24px; height: 24px; margin-right: 10px;" onerror="console.error('Failed to load image');this.style.display='none';">
-          <div>
-            <div style="font-weight: bold;">Tinkercad Desktop</div>
-            <div style="font-size: 12px;">${notificationText}</div>
-          </div>
-        </div>
-      </body>
-    </html>
-  `);
+                // Show notification
+                notification.style.opacity = '1';
 
-    // Close the notification after 3 seconds
-    setTimeout(() => {
-        notificationWindow.close();
-    }, 3000);
+                // Remove after 3 seconds
+                setTimeout(() => {
+                    notification.style.opacity = '0';
+                    setTimeout(() => notification.remove(), 300);
+                }, 3000);
+            })();
+        `);
+    }
 }
