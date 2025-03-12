@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Menu, ipcMain, clipboard } = require('electron');
+const { app, BrowserWindow, Menu, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -50,80 +50,6 @@ const template = [
             { type: 'separator' },
             { role: 'quit', label: t.file.quit }
         ]
-    },
-    {
-        label: t.copyCode.label,
-        click: (menuItem, browserWindow) => {
-            if (browserWindow) {
-                browserWindow.webContents.executeJavaScript(`
-              (() => {
-                const editorElement = document.querySelector('.CodeMirror-code');
-                if (!editorElement) 
-                    return 'empty';
-                
-                // Clone the element to avoid modifying the original DOM
-                const clonedElement = editorElement.cloneNode(true);
-                
-                // Remove all gutter wrapper elements from the clone
-                const gutterWrappers = clonedElement.querySelectorAll('.CodeMirror-gutter-wrapper');
-                gutterWrappers.forEach(wrapper => wrapper.remove());
-                
-                // Get all pre elements (each represents a line of code)
-                const preElements = clonedElement.querySelectorAll('pre');
-                
-                // Extract text from each pre element and join with newlines
-                const codeText = Array.from(preElements)
-                  .map(pre => pre.textContent)
-                  .join('\\r\\n');
-                
-                // Get the clean text content
-                if (codeText != '' && codeText != 'undefined') {
-                    return codeText;
-                } else {
-                    return 'empty';
-                }
-                return codeText;
-              })()
-            `).then(text => {
-                            if (text != 'empty') {
-                                clipboard.writeText(text);
-                                showNotification(browserWindow, t.copyCode.notifications.success);
-                            } else {
-                                showNotification(browserWindow, t.copyCode.notifications.empty);
-                            }
-                        }).catch(error => {
-                            console.error('Error copying code:', error);
-                            showNotification(browserWindow, t.copyCode.notifications.error);
-                        });
-                    }
-                }
-    },
-    {
-        label: t.view.label,
-        submenu: [
-            { role: 'reload', label: t.view.reload },
-            { role: 'forceReload', label: t.view.forceReload },
-            { type: 'separator' },
-            { role: 'resetZoom', label: t.view.resetZoom },
-            { role: 'zoomIn', label: t.view.zoomIn },
-            { role: 'zoomOut', label: t.view.zoomOut },
-            { type: 'separator' },
-            { role: 'togglefullscreen', label: t.view.toggleFullscreen },
-            { type: 'separator' },
-            { role: 'toggleDevTools', label: t.view.toggleDevTools }
-        ]
-    },
-    {
-        label: t.help.label,
-        submenu: [
-            {
-                label: t.help.learnMore,
-                click: async () => {
-                    const { shell } = require('electron');
-                    await shell.openExternal('https://www.tinkercad.com/learn')
-                }
-            }
-        ]
     }
 ];
 
@@ -153,10 +79,9 @@ function createWindow() {
         require('electron').shell.openExternal(url);
         return { action: 'deny' };
     });
-
-    // Open DevTools in development
-    // mainWindow.webContents.openDevTools();
 }
+
+let selectedPort = null;
 
 app.whenReady().then(() => {
     if (process.platform === 'win32') {
@@ -169,7 +94,8 @@ app.whenReady().then(() => {
             createWindow();
         }
     });
-    
+
+    // Initial language setup
     switchLanguage(app.getLocale());
 });
 
@@ -258,6 +184,32 @@ function switchLanguage(locale) {
                     }
         },
         {
+            label: t.listPorts.label,
+            submenu: [],
+            id: 'ports-menu'
+        },
+        {
+            label: t.uploadCode.label,
+            click: async (menuItem, browserWindow) => {
+                if (selectedPort) {
+                    const { exec } = require('child_process');
+                    const arduinoCliPath = path.join(__dirname, './arduino/arduino-cli.exe');
+                    // Execute the Arduino CLI command
+                    exec(`"${arduinoCliPath}" upload -p ${selectedPort}`, (error, stdout, stderr) => {
+                        if (error) {
+                            console.error(`Error uploading code: ${error}`);
+                            showNotification(browserWindow, t.uploadCode.notifications.error);
+                            return;
+                        }
+                        console.log(`Code uploaded successfully: ${stdout}`);
+                        showNotification(browserWindow, t.uploadCode.notifications.success);
+                    });
+                } else {
+                    showNotification(browserWindow, t.uploadCode.notifications.noPort);
+                }
+            }
+        },
+        {
             label: t.view.label,
             submenu: [
                 { role: 'reload', label: t.view.reload },
@@ -294,7 +246,7 @@ function switchLanguage(locale) {
 
 function showNotification(browserWindow, notificationText) {
     const notificationWindow = new BrowserWindow({
-        width: 300,
+        width: 500,
         height: 80,
         frame: false,
         transparent: true,

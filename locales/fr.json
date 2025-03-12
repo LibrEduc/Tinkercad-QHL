@@ -13,6 +13,21 @@
         "error": "Erreur lors de la copie du code"
       }
     },
+    "uploadCode": {
+      "label": "Téléverser le code",
+      "notifications": {
+        "success": "Code téléversé avec succès",
+        "error": "Erreur lors du téléversement du code",
+        "noPort": "Aucun port COM sélectionné"
+      }
+    },
+    "listPorts": {
+      "label": "Lister les cartes disponibles",
+      "notifications": {
+        "noPorts": "Aucune carte Arduino trouvée",
+        "error": "Erreur lors de la liste des cartes Arduino"
+      }
+    },
     "view": {
       "label": "Affichage",
       "reload": "Actualiser",

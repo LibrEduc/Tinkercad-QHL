@@ -13,6 +13,21 @@
         "error": "Error copying code"
       }
     },
+    "uploadCode": {
+      "label": "Upload code",
+      "notifications": {
+        "success": "Code uploaded successfully",
+        "error": "Error uploading code",
+        "noPort": "No COM port selected"
+      }
+    },
+    "listPorts": {
+      "label": "List available boards",
+      "notifications": {
+        "noPorts": "No Arduino boards found",
+        "error": "Error listing Arduino boards"
+      }
+    },
     "view": {
       "label": "View",
       "reload": "Reload",
