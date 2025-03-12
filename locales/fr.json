@@ -1,0 +1,31 @@
+{
+  "menu": {
+    "file": {
+      "label": "Fichier",
+      "language": "Langue",
+      "quit": "Quitter"
+    },
+    "copyCode": {
+      "label": "Copier le code",
+      "notifications": {
+        "success": "Code copié dans le presse-papier",
+        "empty": "Ouvrir le volet de programme textuel pour copier le code",
+        "error": "Erreur lors de la copie du code"
+      }
+    },
+    "view": {
+      "label": "Affichage",
+      "reload": "Actualiser",
+      "forceReload": "Forcer l'actualisation",
+      "resetZoom": "Réinitialiser le zoom",
+      "zoomIn": "Zoom avant",
+      "zoomOut": "Zoom arrière",
+      "toggleFullscreen": "Basculer en plein écran",
+      "toggleDevTools": "Outils de développement"
+    },
+    "help": {
+      "label": "Aide",
+      "learnMore": "En savoir plus"
+    }
+  }
+}

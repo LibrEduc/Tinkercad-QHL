@@ -1,0 +1,31 @@
+{
+  "menu": {
+    "file": {
+      "label": "File",
+      "language": "Language",
+      "quit": "Quit"
+    },
+    "copyCode": {
+      "label": "Copy code",
+      "notifications": {
+        "success": "Code copied to clipboard",
+        "empty": "Open the text program panel to copy the code",
+        "error": "Error copying code"
+      }
+    },
+    "view": {
+      "label": "View",
+      "reload": "Reload",
+      "forceReload": "Force Reload",
+      "resetZoom": "Reset Zoom",
+      "zoomIn": "Zoom In",
+      "zoomOut": "Zoom Out",
+      "toggleFullscreen": "Toggle Fullscreen",
+      "toggleDevTools": "Toggle Developer Tools"
+    },
+    "help": {
+      "label": "Help",
+      "learnMore": "Learn More"
+    }
+  }
+}

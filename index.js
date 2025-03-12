@@ -2,16 +2,53 @@ const { app, BrowserWindow, Menu, ipcMain, clipboard } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
+// Load translations
+function loadTranslations(locale) {
+    const translationPath = path.join(__dirname, 'locales', `${locale}.json`);
+    try {
+        return JSON.parse(fs.readFileSync(translationPath, 'utf8'));
+    } catch (error) {
+        console.error(`Failed to load translations for ${locale}:`, error);
+        return null;
+    }
+}
+
+// Get system locale or fallback to English
+const systemLocale = app.getLocale().split('-')[0];
+const translations = loadTranslations(systemLocale) || loadTranslations('en');
+
 // Create custom menu template
+const t = translations.menu;
 const template = [
     {
-        label: 'File',
+        label: t.file.label,
         submenu: [
             {
-                label: 'Copy code',
-                click: (menuItem, browserWindow) => {
-                    if (browserWindow) {
-                        browserWindow.webContents.executeJavaScript(`
+                label: t.file.language,
+                submenu: [
+                    {
+                        label: 'English',
+                        type: 'radio',
+                        checked: systemLocale === 'en',
+                        click: () => switchLanguage('en')
+                    },
+                    {
+                        label: 'Français',
+                        type: 'radio',
+                        checked: systemLocale === 'fr',
+                        click: () => switchLanguage('fr')
+                    }
+                ]
+            },
+            { type: 'separator' },
+            { role: 'quit', label: t.file.quit }
+        ]
+    },
+    {
+        label: t.copyCode.label,
+        click: (menuItem, browserWindow) => {
+            if (browserWindow) {
+                browserWindow.webContents.executeJavaScript(`
               (() => {
                 const editorElement = document.querySelector('.CodeMirror-code');
                 if (!editorElement) 
@@ -43,41 +80,37 @@ const template = [
             `).then(text => {
                             if (text != 'empty') {
                                 clipboard.writeText(text);
-                                showNotification(browserWindow, 'Code copié dans le presse-papier');
+                                showNotification(browserWindow, t.copyCode.notifications.success);
                             } else {
-                                showNotification(browserWindow, 'Ouvrir le volet de programme textuel pour copier le code');
+                                showNotification(browserWindow, t.copyCode.notifications.empty);
                             }
                         }).catch(error => {
                             console.error('Error copying code:', error);
-                            showNotification(browserWindow, 'Erreur lors de la copie du code');
+                            showNotification(browserWindow, t.copyCode.notifications.error);
                         });
                     }
                 }
-            },
-            { type: 'separator' },
-            { role: 'quit' }
-        ]
     },
     {
-        label: 'View',
+        label: t.view.label,
         submenu: [
-            { role: 'reload' },
-            { role: 'forceReload' },
+            { role: 'reload', label: t.view.reload },
+            { role: 'forceReload', label: t.view.forceReload },
             { type: 'separator' },
-            { role: 'resetZoom' },
-            { role: 'zoomIn' },
-            { role: 'zoomOut' },
+            { role: 'resetZoom', label: t.view.resetZoom },
+            { role: 'zoomIn', label: t.view.zoomIn },
+            { role: 'zoomOut', label: t.view.zoomOut },
             { type: 'separator' },
-            { role: 'togglefullscreen' },
+            { role: 'togglefullscreen', label: t.view.toggleFullscreen },
             { type: 'separator' },
-            { role: 'toggleDevTools' }
+            { role: 'toggleDevTools', label: t.view.toggleDevTools }
         ]
     },
     {
-        role: 'help',
+        label: t.help.label,
         submenu: [
             {
-                label: 'Learn More',
+                label: t.help.learnMore,
                 click: async () => {
                     const { shell } = require('electron');
                     await shell.openExternal('https://www.tinkercad.com/learn')
@@ -136,6 +169,118 @@ app.on('window-all-closed', function () {
         app.quit();
     }
 });
+
+function switchLanguage(locale) {
+    // Load new translations
+    const newTranslations = loadTranslations(locale) || loadTranslations('en');
+    const t = newTranslations.menu;
+
+    // Update menu template with new translations
+    const template = [
+        {
+            label: t.file.label,
+            submenu: [
+                {
+                    label: t.file.language,
+                    submenu: [
+                        {
+                            label: 'English',
+                            type: 'radio',
+                            checked: locale === 'en',
+                            click: () => switchLanguage('en')
+                        },
+                        {
+                            label: 'Français',
+                            type: 'radio',
+                            checked: locale === 'fr',
+                            click: () => switchLanguage('fr')
+                        }
+                    ]
+                },
+                { type: 'separator' },
+                { role: 'quit', label: t.file.quit }
+            ]
+        },
+        {
+            label: t.copyCode.label,
+            click: (menuItem, browserWindow) => {
+                if (browserWindow) {
+                    browserWindow.webContents.executeJavaScript(`
+                  (() => {
+                    const editorElement = document.querySelector('.CodeMirror-code');
+                    if (!editorElement) 
+                        return 'empty';
+                    
+                    // Clone the element to avoid modifying the original DOM
+                    const clonedElement = editorElement.cloneNode(true);
+                    
+                    // Remove all gutter wrapper elements from the clone
+                    const gutterWrappers = clonedElement.querySelectorAll('.CodeMirror-gutter-wrapper');
+                    gutterWrappers.forEach(wrapper => wrapper.remove());
+                    
+                    // Get all pre elements (each represents a line of code)
+                    const preElements = clonedElement.querySelectorAll('pre');
+                    
+                    // Extract text from each pre element and join with newlines
+                    const codeText = Array.from(preElements)
+                      .map(pre => pre.textContent)
+                      .join('\\r\\n');
+                    
+                    // Get the clean text content
+                    if (codeText != '' && codeText != 'undefined') {
+                        return codeText;
+                    } else {
+                        return 'empty';
+                    }
+                    return codeText;
+                  })()
+                `).then(text => {
+                                if (text != 'empty') {
+                                    clipboard.writeText(text);
+                                    showNotification(browserWindow, t.copyCode.notifications.success);
+                                } else {
+                                    showNotification(browserWindow, t.copyCode.notifications.empty);
+                                }
+                            }).catch(error => {
+                                console.error('Error copying code:', error);
+                                showNotification(browserWindow, t.copyCode.notifications.error);
+                            });
+                        }
+                    }
+        },
+        {
+            label: t.view.label,
+            submenu: [
+                { role: 'reload', label: t.view.reload },
+                { role: 'forceReload', label: t.view.forceReload },
+                { type: 'separator' },
+                { role: 'resetZoom', label: t.view.resetZoom },
+                { role: 'zoomIn', label: t.view.zoomIn },
+                { role: 'zoomOut', label: t.view.zoomOut },
+                { type: 'separator' },
+                { role: 'togglefullscreen', label: t.view.toggleFullscreen },
+                { type: 'separator' },
+                { role: 'toggleDevTools', label: t.view.toggleDevTools }
+            ]
+        },
+        {
+            label: t.help.label,
+            submenu: [
+                {
+                    label: t.help.learnMore,
+                    click: async () => {
+                        const { shell } = require('electron');
+                        await shell.openExternal('https://www.tinkercad.com/learn')
+                    }
+                }
+            ]
+        }
+    ];
+
+    // Build and set the new menu
+    const menu = Menu.buildFromTemplate(template);
+    Menu.setApplicationMenu(menu);
+}
 
 
 function showNotification(browserWindow, notificationText) {
