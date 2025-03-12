@@ -203,13 +203,20 @@ function switchLanguage(locale) {
                         .filter(line => line.trim()) // Remove empty lines
                         .map(line => {
                             const parts = line.split(/\s+/);
-                            return parts[0] + ' ' + parts[5] + ' ' + parts[6]; // Return only the port information
+                            let boardInfo = parts[0] + ' ' + parts[5];
+                            if (parts[6] !== undefined) {
+                                boardInfo += ' ' + parts[6];
+                            }
+                            return boardInfo; // Return the port information
                         })
                         .join('\n');
 
-                    // Write the filtered information to com.txt
+                    // Write the filtered information to com.txt and show notification
                     if (boardInfo) {
                         fs.writeFileSync('com.txt', boardInfo);
+                        showNotification(browserWindow, boardInfo);
+                    } else {
+                        showNotification(browserWindow, t.listPorts.notifications.noPorts);
                     }
                 });
             }
@@ -249,35 +256,42 @@ function switchLanguage(locale) {
 
 function showNotification(browserWindow, message) {
     if (browserWindow) {
+        const escapedMessage = message.replace(/[\\"']/g, '\\$&').replace(/\n/g, '\\n');
         browserWindow.webContents.executeJavaScript(`
             (() => {
-                const notification = document.createElement('div');
-                notification.style.position = 'fixed';
-                notification.style.left = '50%';
-                notification.style.top = '50%';
-                notification.style.transform = 'translate(-50%, -50%)';
-                notification.style.backgroundColor = '#333';
-                notification.style.color = 'white';
-                notification.style.padding = '10px 20px';
-                notification.style.borderRadius = '5px';
-                notification.style.zIndex = '9999';
-                notification.style.opacity = '0';
-                notification.style.transition = 'opacity 0.3s ease-in-out';
-                notification.textContent = ${JSON.stringify(message)};
-
-                document.body.appendChild(notification);
-
-                // Trigger reflow
-                notification.offsetHeight;
-
-                // Show notification
-                notification.style.opacity = '1';
-
-                // Remove after 3 seconds
-                setTimeout(() => {
+                try {
+                    const notification = document.createElement('div');
+                    notification.style.position = 'fixed';
+                    notification.style.left = '50%';
+                    notification.style.top = '50%';
+                    notification.style.transform = 'translate(-50%, -50%)';
+                    notification.style.backgroundColor = '#333';
+                    notification.style.color = 'white';
+                    notification.style.padding = '10px 20px';
+                    notification.style.borderRadius = '5px';
+                    notification.style.zIndex = '9999';
                     notification.style.opacity = '0';
-                    setTimeout(() => notification.remove(), 300);
-                }, 3000);
+                    notification.style.transition = 'opacity 0.3s ease-in-out';
+                    notification.style.textAlign = 'center';
+                    notification.style.whiteSpace = 'pre-wrap';
+                    notification.textContent = "${escapedMessage}";
+
+                    document.body.appendChild(notification);
+
+                    // Trigger reflow
+                    notification.offsetHeight;
+
+                    // Show notification
+                    notification.style.opacity = '1';
+
+                    // Remove after 3 seconds
+                    setTimeout(() => {
+                        notification.style.opacity = '0';
+                        setTimeout(() => notification.remove(), 300);
+                    }, 3000);
+                } catch (error) {
+                    console.error('Error showing notification:', error);
+                }
             })();
         `);
     }

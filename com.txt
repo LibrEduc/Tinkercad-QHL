@@ -1,2 +1,2 @@
-COM5 Unknown undefined
+COM5 Unknown
 COM6 Arduino Uno
