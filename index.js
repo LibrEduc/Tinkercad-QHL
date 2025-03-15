@@ -53,11 +53,10 @@ const template = [
     },
     {
         label: t.arduino.label,
-        icon: path.join(__dirname, 'Arduino_IDE_logo.png'),
         submenu: [
             {
                 label: t.listPorts.label,
-                click: async (menuItem, browserWindow) => listArduinoBoards(menuItem, browserWindow, t, template)
+                id: 'ports-menu'
             }
         ]
     }
@@ -92,37 +91,17 @@ function createWindow() {
 }
 
 let selectedPort = null;
+let boardDetectionInterval;
 
-app.whenReady().then(() => {
-    if (process.platform === 'win32') {
-        app.setAppUserModelId(app.name);
-    }
-    createWindow();
-
-    app.on('activate', function () {
-        if (BrowserWindow.getAllWindows().length === 0) {
-            createWindow();
-        }
-    });
-
-    // Initial language setup
-    switchLanguage(app.getLocale());
-    listArduinoBoards(loadTranslations(app.getLocale()).menu, browserWindow, t, template);
-});
-
-app.on('window-all-closed', function () {
-    if (process.platform !== 'darwin') {
-        app.quit();
-    }
-});
-
-function listArduinoBoards(menuItem, browserWindow, t, template) {
+function listArduinoBoards(browserWindow) {
     const { exec } = require('child_process');
     const arduinoCliPath = path.join(__dirname, './arduino/arduino-cli.exe');
     exec(`"${arduinoCliPath}" board list`, (error, stdout, stderr) => {
         if (error) {
             console.error(`Error listing boards: ${error}`);
-            showNotification(browserWindow, t.listPorts.notifications.error);
+            if (browserWindow) {
+                showNotification(browserWindow, t.listPorts.notifications.error);
+            }
             return;
         }
 
@@ -141,35 +120,81 @@ function listArduinoBoards(menuItem, browserWindow, t, template) {
                 return { port, boardName };
             });
 
-        if (boards.length > 0) {
-            // Create submenu items for each board
-            const portsSubmenu = boards.map(board => ({
-                label: `${board.port} - ${board.boardName}`,
-                type: 'radio',
-                checked: selectedPort === board.port,
-                click: () => {
-                    selectedPort = board.port;
-                    showNotification(browserWindow, t.listPorts.notifications.portSelected.replace('{port}', board.port));
-                }
-            }));
-
-            // Update the Arduino menu to include the ports submenu
-            const arduinoMenu = template.find(item => item.label === t.arduino.label);
-            if (arduinoMenu) {
-                arduinoMenu.submenu = [
-                    {
-                        label: t.listPorts.label,
-                        submenu: portsSubmenu
-                    }
-                ];
-                const newMenu = Menu.buildFromTemplate(template);
-                Menu.setApplicationMenu(newMenu);
+        // Update the Arduino menu to include the ports submenu
+        const currentMenu = Menu.getApplicationMenu();
+        const template = currentMenu.items.map(item => {
+            if (item.label === t.arduino.label) {
+                return {
+                    ...item,
+                    submenu: [
+                        {
+                            label: t.listPorts.label,
+                            submenu: boards.map(board => ({
+                                label: `${board.port} - ${board.boardName}`,
+                                type: 'radio',
+                                checked: selectedPort === board.port,
+                                click: () => {
+                                    selectedPort = board.port;
+                                    if (browserWindow) {
+                                        showNotification(browserWindow, t.listPorts.notifications.portSelected.replace('{port}', board.port));
+                                    }
+                                }
+                            }))
+                        }
+                    ]
+                };
             }
-        } else {
-            showNotification(browserWindow, t.listPorts.notifications.noPorts);
-        }
+            return item;
+        });
+
+        const newMenu = Menu.buildFromTemplate(template);
+        Menu.setApplicationMenu(newMenu);
+
+            if (boards.length === 0 && browserWindow) {
+                showNotification(browserWindow, t.listPorts.notifications.noPorts);
+            }
     });
 }
+
+app.whenReady().then(() => {
+    if (process.platform === 'win32') {
+        app.setAppUserModelId(app.name);
+    }
+    createWindow();
+
+    app.on('activate', function () {
+        if (BrowserWindow.getAllWindows().length === 0) {
+            createWindow();
+        }
+    });
+
+    // Initial language setup
+    switchLanguage(app.getLocale());
+
+    // Start background board detection service
+    const mainWindow = BrowserWindow.getAllWindows()[0];
+    listArduinoBoards(mainWindow);
+    boardDetectionInterval = setInterval(() => {
+        listArduinoBoards(mainWindow);
+    }, 1000); // Check every 2 seconds
+
+    // Keep Arduino menu and let board detection service update it
+    const mainMenu = Menu.getApplicationMenu();
+    if (mainMenu) {
+        listArduinoBoards(mainWindow);
+    }
+});
+
+app.on('window-all-closed', function () {
+    // Clear the board detection interval
+    if (boardDetectionInterval) {
+        clearInterval(boardDetectionInterval);
+    }
+
+    if (process.platform !== 'darwin') {
+        app.quit();
+    }
+});
 
 function switchLanguage(locale) {
     // Load new translations
@@ -256,7 +281,7 @@ function switchLanguage(locale) {
             submenu: [
                 {
                     label: t.listPorts.label,
-                    click: async (menuItem, browserWindow) => listArduinoBoards(menuItem, browserWindow, t, template)
+                    id: 'ports-menu'
                 }
             ]
         },
