@@ -50,15 +50,6 @@ const template = [
             { type: 'separator' },
             { role: 'quit', label: t.file.quit }
         ]
-    },
-    {
-        label: t.arduino.label,
-        submenu: [
-            {
-                label: t.listPorts.label,
-                id: 'ports-menu'
-            }
-        ]
     }
 ];
 
@@ -120,32 +111,27 @@ function listArduinoBoards(browserWindow) {
                 return { port, boardName };
             });
 
-        // Update the Arduino menu to include the ports submenu
+        // Update the ports menu with available boards
         const currentMenu = Menu.getApplicationMenu();
         const template = currentMenu.items.map(item => {
-            if (item.label === t.arduino.label) {
+            if (item.id === 'ports-menu') {
                 return {
                     ...item,
-                    submenu: [
-                        {
-                            label: t.listPorts.label,
-                            submenu: boards.map(board => ({
-                                label: `${board.port} - ${board.boardName}`,
-                                type: 'radio',
-                                checked: selectedPort === board.port,
-                                click: () => {
-                                    selectedPort = board.port;
-                                    if (browserWindow) {
-                                        showNotification(browserWindow, t.listPorts.notifications.portSelected.replace('{port}', board.port));
-                                    }
-                                }
-                            }))
+                    submenu: boards.map(board => ({
+                        label: `${board.port} - ${board.boardName}`,
+                        type: 'radio',
+                        checked: selectedPort === board.port,
+                        click: () => {
+                            selectedPort = board.port;
+                            if (browserWindow) {
+                                showNotification(browserWindow, t.listPorts.notifications.portSelected.replace('{port}', board.port));
+                            }
                         }
-                    ]
+                    }))
                 };
             }
             return item;
-        });
+        })
 
         const newMenu = Menu.buildFromTemplate(template);
         Menu.setApplicationMenu(newMenu);
@@ -279,10 +265,12 @@ function switchLanguage(locale) {
         {
             label: t.arduino.label,
             submenu: [
-                {
-                    label: t.listPorts.label,
-                    id: 'ports-menu'
-                }
+            ]
+        },
+        {
+            label: t.listPorts.label,
+            id: 'ports-menu',
+            submenu: [
             ]
         },
         {
