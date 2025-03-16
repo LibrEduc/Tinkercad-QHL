@@ -263,14 +263,32 @@ function switchLanguage(locale) {
             ]
         },
         {
-            label: t.arduino.label,
-            submenu: [
-            ]
-        },
-        {
             label: t.listPorts.label,
             id: 'ports-menu',
+            submenu: []
+        },
+        {
+            label: 'Arduino',
             submenu: [
+                {
+                    label: t.file.installArduino.label,
+                    click: (menuItem, browserWindow) => {
+                        const { exec } = require('child_process');
+                        const arduinoCliPath = path.join(__dirname, './arduino/arduino-cli.exe');
+                        exec(`"${arduinoCliPath}" core install arduino:avr`, (error, stdout, stderr) => {
+                            if (error) {
+                                console.error(`Error installing Arduino compiler: ${error}`);
+                                showNotification(browserWindow, t.file.installArduino.notifications.error);
+                                return;
+                            }
+                            showNotification(browserWindow, t.file.installArduino.notifications.success);
+                        });
+                    }
+                },
+                { type: 'separator' },
+                {
+                    label: t.uploadCode.label
+                }
             ]
         },
         {

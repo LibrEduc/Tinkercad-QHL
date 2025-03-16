@@ -3,6 +3,13 @@
     "file": {
       "label": "File",
       "language": "Language",
+      "installArduino": {
+        "label": "Install Arduino Compiler",
+        "notifications": {
+          "success": "Arduino compiler installed successfully",
+          "error": "Error installing Arduino compiler"
+        }
+      },
       "quit": "Quit"
     },
     "copyCode": {
@@ -38,9 +45,6 @@
       "zoomOut": "Zoom Out",
       "toggleFullscreen": "Toggle Fullscreen",
       "toggleDevTools": "Toggle Developer Tools"
-    },
-    "arduino": {
-      "label": "Arduino"
     },
     "help": {
       "label": "Help",
