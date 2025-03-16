@@ -17,6 +17,7 @@ function loadTranslations(locale) {
 const rawLocale = app.getLocale();
 const systemLocale = rawLocale ? rawLocale.split('-')[0] : 'en';
 let translations = loadTranslations(systemLocale);
+let selectedBoard = "";
 
 // Only fallback to English if the translation file doesn't exist or is invalid
 if (!translations) {
@@ -124,8 +125,9 @@ function listArduinoBoards(browserWindow) {
                         click: () => {
                             selectedPort = board.port;
                             if (browserWindow) {
-                                showNotification(browserWindow, t.listPorts.notifications.portSelected.replace('{port}', board.port));
+                                showNotification(browserWindow, t.listPorts.notifications.portSelected.replace('{port}', board.port) + ', ' + board.boardName);
                             }
+                            selectedBoard = board.boardName;
                         }
                     }))
                 };
@@ -136,9 +138,9 @@ function listArduinoBoards(browserWindow) {
         const newMenu = Menu.buildFromTemplate(template);
         Menu.setApplicationMenu(newMenu);
 
-            if (boards.length === 0 && browserWindow) {
-                showNotification(browserWindow, t.listPorts.notifications.noPorts);
-            }
+        if (boards.length === 0 && browserWindow) {
+            showNotification(browserWindow, t.listPorts.notifications.noPorts);
+        }
     });
 }
 
@@ -287,7 +289,88 @@ function switchLanguage(locale) {
                 },
                 { type: 'separator' },
                 {
-                    label: t.uploadCode.label
+                    label: t.uploadCode.label,
+                    click: (menuItem, browserWindow) => {
+                        if (!selectedPort) {
+                            showNotification(browserWindow, t.uploadCode.notifications.noPort);
+                            return;
+                        }
+                        if (selectedBoard != "Arduino Uno") {
+                            showNotification(browserWindow, t.uploadCode.notifications.falsePort);
+                            return;
+                        }
+
+                        const { exec } = require('child_process');
+                        const arduinoCliPath = path.join(__dirname, './arduino/arduino-cli.exe');
+
+                        // Get the code from the editor
+                        browserWindow.webContents.executeJavaScript(`
+                                (() => {
+                            const editorElement = document.querySelector('.CodeMirror-code');
+                            if (!editorElement) 
+                                return 'empty';
+                            
+                            // Clone the element to avoid modifying the original DOM
+                            const clonedElement = editorElement.cloneNode(true);
+                            
+                            // Remove all gutter wrapper elements from the clone
+                            const gutterWrappers = clonedElement.querySelectorAll('.CodeMirror-gutter-wrapper');
+                            gutterWrappers.forEach(wrapper => wrapper.remove());
+                            
+                            // Get all pre elements (each represents a line of code)
+                            const preElements = clonedElement.querySelectorAll('pre');
+                            
+                            // Extract text from each pre element and join with newlines
+                            const codeText = Array.from(preElements)
+                              .map(pre => pre.textContent)
+                              .join('\\r\\n');
+                            
+                            // Get the clean text content
+                            if (codeText != '' && codeText != 'undefined') {
+                                return codeText;
+                            } else {
+                                return 'empty';
+                            }
+                            return codeText;
+                          })()
+                            `).then(code => {
+                            if (code === 'empty') {
+                                showNotification(browserWindow, t.copyCode.notifications.empty);
+                                return;
+                            }
+
+                            // Write the code to div.ino
+                            const sketchPath = path.join(__dirname, '/div/div.ino');
+                            fs.writeFile(sketchPath, code, (err) => {
+                                if (err) {
+                                    console.error('Error writing sketch file:', err);
+                                    showNotification(browserWindow, t.uploadCode.notifications.error);
+                                    return;
+                                }
+
+                                showNotification(browserWindow, t.compileCode.notifications.progress);
+                                // Upload the code to the Arduino
+                                exec(`"${arduinoCliPath}" compile --fqbn arduino:avr:uno div`, (error, stdout, stderr) => {
+                                    if (error) {
+                                        console.error(`Error compiling code: ${error}`);
+                                        showNotification(browserWindow, t.compileCode.notifications.error);
+                                        return;
+                                    }
+                                    exec(`"${arduinoCliPath}" upload -p ${selectedPort} --fqbn arduino:avr:uno div`, (error, stdout, stderr) => {
+                                        if (error) {
+                                            console.error(`Error uploading code: ${error}`);
+                                            showNotification(browserWindow, t.uploadCode.notifications.error);
+                                            return;
+                                        }
+                                        showNotification(browserWindow, t.uploadCode.notifications.success);
+                                    });
+                                });
+                            });
+                        }).catch(error => {
+                            console.error('Error getting code:', error);
+                            showNotification(browserWindow, t.copyCode.notifications.error);
+                        });
+                    }
                 }
             ]
         },

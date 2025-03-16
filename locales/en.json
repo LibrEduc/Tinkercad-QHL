@@ -25,7 +25,16 @@
       "notifications": {
         "success": "Code uploaded successfully",
         "error": "Error uploading code",
-        "noPort": "No COM port selected"
+        "noPort": "No COM port selected",
+        "falsePort": "This COM port does not seem to be connected to an Arduino board"
+      }
+    },
+    "compileCode": {
+      "label": "Compile code",
+      "notifications": {
+        "progress": "Compilation in progress...",
+        "success": "Code compiled successfully",
+        "error": "Error compiling code"
       }
     },
     "listPorts": {

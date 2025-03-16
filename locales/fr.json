@@ -25,7 +25,16 @@
       "notifications": {
         "success": "Code téléversé avec succès",
         "error": "Erreur lors du téléversement du code",
-        "noPort": "Aucun port COM sélectionné"
+        "noPort": "Aucun port COM sélectionné",
+        "falsePort": "Le port COM ne semble pas être correct"
+      }
+    },
+    "compileCode": {
+      "label": "Compile le code",
+      "notifications": {
+        "progress": "Compilation en cours...",
+        "success": "Code compilé avec succès",
+        "error": "Erreur lors de la compilation du code"
       }
     },
     "listPorts": {
