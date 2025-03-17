@@ -1,2 +1,4 @@
 dist/win-unpacked/
 dist/win-unpacked/**/*
+node_modules/
+node_modules/**/*

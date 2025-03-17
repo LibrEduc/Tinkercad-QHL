@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Install Library</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f5;
+            user-select: none;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            box-sizing: border-box;
+        }
+
+        .titlebar {
+            -webkit-app-region: drag;
+            height: 32px;
+            background: transparent;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .close-button {
+            -webkit-app-region: no-drag;
+            background: transparent;
+            border: none;
+            color: #666;
+            cursor: pointer;
+            padding: 8px;
+            font-size: 16px;
+        }
+
+        .close-button:hover {
+            color: #000;
+        }
+
+        .content {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        input {
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            outline: none;
+        }
+
+        input:focus {
+            border-color: #0066cc;
+            box-shadow: 0 0 0 2px rgba(0,102,204,0.2);
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #0066cc;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background: #0052a3;
+        }
+
+        button:active {
+            background: #004080;
+        }
+    </style>
+</head>
+<body>
+    <div class="titlebar">
+        <div></div>
+        <button class="close-button" onclick="window.api.closeWindow()">✕</button>
+    </div>
+    <div class="content">
+        <input type="text" id="libraryName" placeholder="Enter library name" autofocus>
+        <button onclick="submitLibrary()">Install</button>
+    </div>
+    <script>
+        function submitLibrary() {
+            const libraryName = document.getElementById('libraryName').value.trim();
+            if (libraryName) {
+                window.api.installLibrary(libraryName);
+            }
+        }
+
+        document.getElementById('libraryName').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                submitLibrary();
+            }
+        });
+    </script>
+</body>
+</html>

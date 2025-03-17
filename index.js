@@ -1,4 +1,35 @@
-const { app, BrowserWindow, Menu, clipboard } = require('electron');
+const { app, BrowserWindow, Menu, clipboard, ipcMain } = require('electron');
+
+// IPC handlers for library dialog
+ipcMain.on('close-library-dialog', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win) win.close();
+});
+
+ipcMain.on('install-library', (event, libraryName) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    const mainWindow = BrowserWindow.getAllWindows().find(w => w !== win);
+
+    if (!libraryName) {
+        if (mainWindow) showNotification(mainWindow, t.installLibrary.notifications.empty);
+        return;
+    }
+
+    if (mainWindow) showNotification(mainWindow, t.installLibrary.notifications.progress);
+
+    const arduinoCliPath = path.join(__dirname, './arduino/arduino-cli.exe');
+    const { exec } = require('child_process');
+    
+    exec(`"${arduinoCliPath}" lib install ${libraryName}`, (error) => {
+        if (error) {
+            console.error(`Error installing library: ${error}`);
+            if (mainWindow) showNotification(mainWindow, t.installLibrary.notifications.error);
+        } else {
+            if (mainWindow) showNotification(mainWindow, t.installLibrary.notifications.success);
+        }
+        if (win) win.close();
+    });
+});
 const path = require('path');
 const fs = require('fs');
 
@@ -353,6 +384,24 @@ function switchLanguage(locale) {
                 },
                 { type: 'separator' },
                 {
+                    label: t.installLibrary.label,
+                    click: () => {
+                        const libraryDialog = new BrowserWindow({
+                            width: 400,
+                            height: 200,
+                            frame: false,
+                            resizable: false,
+                            webPreferences: {
+                                nodeIntegration: true,
+                                contextIsolation: true,
+                                preload: path.join(__dirname, 'preload.js')
+                            }
+                        });
+                        libraryDialog.loadFile('library-dialog.html');
+                    }
+                },
+                { type: 'separator' },
+                {
                     label: t.file.installArduino.label,
                     click: (menuItem, browserWindow) => {
                         const { exec } = require('child_process');
@@ -366,9 +415,6 @@ function switchLanguage(locale) {
                             showNotification(browserWindow, t.file.installArduino.notifications.success);
                         });
                     }
-                },
-                {
-                    label: t.file.installLibrary.label
                 }
             ]
         },
