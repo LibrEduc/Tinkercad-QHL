@@ -215,18 +215,14 @@ function switchLanguage(locale) {
                             // Get all pre elements (each represents a line of code)
                             const preElements = clonedElement.querySelectorAll('pre');
                             
-                            // Extract text from each pre element and join with newlines
+                            // Extract text from each pre element and normalize the content
                             const codeText = Array.from(preElements)
-                              .map(pre => pre.textContent)
-                              .join('\\r\\n');
+                              .map(pre => pre.textContent.normalize())
+                              .join('\\r\\n')
+                              .replace(/[\u2018\u2019\u201C\u201D]/g, '"') // Replace smart quotes
+                              .replace(/[\u2013\u2014]/g, '-'); // Replace em/en dashes
                             
-                            // Get the clean text content
-                            if (codeText != '' && codeText != 'undefined') {
-                                return codeText;
-                            } else {
-                                return 'empty';
-                            }
-                            return codeText;
+                            return codeText && codeText !== 'undefined' ? codeText : 'empty';
                           })()
                         `).then(text => {
                                 if (text != 'empty') {
@@ -305,7 +301,7 @@ function switchLanguage(locale) {
 
                         // Get the code from the editor
                         browserWindow.webContents.executeJavaScript(`
-                                (() => {
+                          (() => {
                             const editorElement = document.querySelector('.CodeMirror-code');
                             if (!editorElement) 
                                 return 'empty';
@@ -320,18 +316,15 @@ function switchLanguage(locale) {
                             // Get all pre elements (each represents a line of code)
                             const preElements = clonedElement.querySelectorAll('pre');
                             
-                            // Extract text from each pre element and join with newlines
+                            // Extract text from each pre element and normalize the content
                             const codeText = Array.from(preElements)
-                              .map(pre => pre.textContent)
-                              .join('\\r\\n');
+                              .map(pre => pre.textContent.normalize())
+                              .join('\\r\\n')
+                              .replace(/[\u2018\u2019\u201C\u201D]/g, '"') // Replace smart quotes
+                              .replace(/[\u2013\u2014]/g, '-') // Replace em/en dashes
+                              .replace(/[\u200B]/g, ''); // Replace zerowidth spaces
                             
-                            // Get the clean text content
-                            if (codeText != '' && codeText != 'undefined') {
-                                return codeText;
-                            } else {
-                                return 'empty';
-                            }
-                            return codeText;
+                            return codeText && codeText !== 'undefined' ? codeText : 'empty';
                           })()
                             `).then(code => {
                             if (code === 'empty') {
@@ -340,23 +333,24 @@ function switchLanguage(locale) {
                             }
 
                             // Write the code to div.ino
-                            const sketchPath = path.join(__dirname, '/div/div.ino');
+                            const sketchPath = path.join(__dirname, '/sketch/sketch.ino');
                             fs.writeFile(sketchPath, code, (err) => {
                                 if (err) {
                                     console.error('Error writing sketch file:', err);
-                                    showNotification(browserWindow, t.uploadCode.notifications.error);
+                                    showNotification(browserWindow, t.uploadCode.notifications.file);
                                     return;
                                 }
 
                                 showNotification(browserWindow, t.compileCode.notifications.progress);
                                 // Upload the code to the Arduino
-                                exec(`"${arduinoCliPath}" compile --fqbn arduino:avr:uno div`, (error, stdout, stderr) => {
+                                exec(`"${arduinoCliPath}" compile --fqbn arduino:avr:uno sketch`, (error, stdout, stderr) => {
                                     if (error) {
                                         console.error(`Error compiling code: ${error}`);
                                         showNotification(browserWindow, t.compileCode.notifications.error);
                                         return;
                                     }
-                                    exec(`"${arduinoCliPath}" upload -p ${selectedPort} --fqbn arduino:avr:uno div`, (error, stdout, stderr) => {
+                                    showNotification(browserWindow, t.uploadCode.notifications.progress);
+                                    exec(`"${arduinoCliPath}" upload -p ${selectedPort} --fqbn arduino:avr:uno sketch`, (error, stdout, stderr) => {
                                         if (error) {
                                             console.error(`Error uploading code: ${error}`);
                                             showNotification(browserWindow, t.uploadCode.notifications.error);
@@ -367,7 +361,7 @@ function switchLanguage(locale) {
                                 });
                             });
                         }).catch(error => {
-                            console.error('Error getting code:', error);
+                            console.error('Error copying code:', error);
                             showNotification(browserWindow, t.copyCode.notifications.error);
                         });
                     }

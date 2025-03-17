@@ -23,10 +23,12 @@
     "uploadCode": {
       "label": "Upload code",
       "notifications": {
+        "progress": "Upload in progress...",
         "success": "Code uploaded successfully",
         "error": "Error uploading code",
         "noPort": "No COM port selected",
-        "falsePort": "This COM port does not seem to be connected to an Arduino board"
+        "falsePort": "This COM port does not seem to be connected to an Arduino board",
+        "file": "File save problem"
       }
     },
     "compileCode": {

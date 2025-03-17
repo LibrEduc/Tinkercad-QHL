@@ -23,10 +23,12 @@
     "uploadCode": {
       "label": "Téléverser le code",
       "notifications": {
+        "progress": "Téléversement en cours...",
         "success": "Code téléversé avec succès",
         "error": "Erreur lors du téléversement du code",
         "noPort": "Aucun port COM sélectionné",
-        "falsePort": "Le port COM ne semble pas être correct"
+        "falsePort": "Le port COM ne semble pas être correct",
+        "file": "Erreur d'écriture du fichier"
       }
     },
     "compileCode": {
