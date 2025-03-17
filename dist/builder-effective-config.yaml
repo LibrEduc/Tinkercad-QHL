@@ -6,7 +6,17 @@ productName: Tinkercad Desktop
 win:
   target:
     - portable
+    - zip
   defaultArch: x64
   icon: build/autodesk-tinkercad.png
+extraResources:
+  - from: arduino
+    to: ../arduino
+    filter:
+      - '**/*'
+  - from: sketch
+    to: ../sketch
+    filter:
+      - '**/*'
 files: []
 electronVersion: 35.0.1

@@ -5,7 +5,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron .",
-    "build": "electron-builder --win portable"
+    "build": "electron-builder --win zip"
   },
   "keywords": [],
   "author": "",
@@ -25,11 +25,24 @@
     },
     "win": {
       "target": [
-        "portable"
+        "portable",
+        "zip"
       ],
       "defaultArch": "x64",
       "icon": "build/autodesk-tinkercad.png"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "arduino",
+        "to": "../arduino",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "sketch",
+        "to": "../sketch",
+        "filter": ["**/*"]
+      }
+    ]
   },
   "dependencies": {
     "electron-prompt": "^1.7.0"

@@ -1,4 +1,13 @@
 const { app, BrowserWindow, Menu, clipboard, ipcMain } = require('electron');
+const path = require('node:path');
+
+//create a function which returns true or false to recognize a development environment
+function isDev() {
+  return !app.getAppPath().includes('app.asar');
+}
+const directory = isDev() ? __dirname : app.getAppPath();//This requires an environment variable, which we will get to in a moment.//require files joining that directory variable with the location within your package of files
+const directoryAppAsar = isDev() ? directory : directory + '/../../';
+const arduinoCliPath = path.join(directoryAppAsar, './arduino/arduino-cli.exe');
 
 // IPC handlers for library dialog
 ipcMain.on('close-library-dialog', (event) => {
@@ -17,9 +26,7 @@ ipcMain.on('install-library', (event, libraryName) => {
 
     if (mainWindow) showNotification(mainWindow, t.installLibrary.notifications.progress);
 
-    const arduinoCliPath = path.join(__dirname, './arduino/arduino-cli.exe');
-    const { exec } = require('child_process');
-    
+    const { exec } = require('child_process');    
     exec(`"${arduinoCliPath}" lib install ${libraryName}`, (error) => {
         if (error) {
             console.error(`Error installing library: ${error}`);
@@ -30,12 +37,12 @@ ipcMain.on('install-library', (event, libraryName) => {
         if (win) win.close();
     });
 });
-const path = require('path');
+//const path = require('path');
 const fs = require('fs');
 
 // Load translations
 function loadTranslations(locale) {
-    const translationPath = path.join(__dirname, 'locales', `${locale}.json`);
+    const translationPath = path.join(directory, './locales', `${locale}.json`);
     try {
         return JSON.parse(fs.readFileSync(translationPath, 'utf8'));
     } catch (error) {
@@ -95,7 +102,7 @@ function createWindow() {
     const mainWindow = new BrowserWindow({
         width: 1200,
         height: 800,
-        icon: path.join(__dirname, 'autodesk-tinkercad.png'),
+        icon: path.join(directory, 'autodesk-tinkercad.png'),
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
@@ -120,12 +127,11 @@ let previousBoards = [];
 
 function listArduinoBoards(browserWindow) {
     const { exec } = require('child_process');
-    const arduinoCliPath = path.join(__dirname, './arduino/arduino-cli.exe');
     exec(`"${arduinoCliPath}" board list`, (error, stdout, stderr) => {
         if (error) {
             console.error(`Error listing boards: ${error}`);
             if (browserWindow) {
-                showNotification(browserWindow, t.listPorts.notifications.error);
+                showNotification(browserWindow, arduinoCliPath + ' - ' + t.listPorts.notifications.error);
             }
             return;
         }
@@ -321,9 +327,6 @@ function switchLanguage(locale) {
                             return;
                         }
 
-                        const { exec } = require('child_process');
-                        const arduinoCliPath = path.join(__dirname, './arduino/arduino-cli.exe');
-
                         // Get the code from the editor
                         browserWindow.webContents.executeJavaScript(`
                           (() => {
@@ -358,7 +361,7 @@ function switchLanguage(locale) {
                             }
 
                             // Write the code to div.ino
-                            const sketchPath = path.join(__dirname, '/sketch/sketch.ino');
+                            const sketchPath = path.join(directory, '/sketch/sketch.ino');
                             fs.writeFile(sketchPath, code, (err) => {
                                 if (err) {
                                     console.error('Error writing sketch file:', err);
@@ -368,6 +371,7 @@ function switchLanguage(locale) {
 
                                 showNotification(browserWindow, t.compileCode.notifications.progress);
                                 // Upload the code to the Arduino
+                                const { exec } = require('child_process');
                                 exec(`"${arduinoCliPath}" compile --fqbn arduino:avr:uno sketch`, (error, stdout, stderr) => {
                                     if (error) {
                                         console.error(`Error compiling code: ${error}`);
@@ -403,7 +407,7 @@ function switchLanguage(locale) {
                             webPreferences: {
                                 nodeIntegration: true,
                                 contextIsolation: true,
-                                preload: path.join(__dirname, 'preload.js')
+                                preload: path.join(directory, 'preload.js')
                             }
                         });
                         libraryDialog.loadFile('library-dialog.html');
@@ -414,7 +418,6 @@ function switchLanguage(locale) {
                     label: t.file.installArduino.label,
                     click: (menuItem, browserWindow) => {
                         const { exec } = require('child_process');
-                        const arduinoCliPath = path.join(__dirname, './arduino/arduino-cli.exe');
                         exec(`"${arduinoCliPath}" core install arduino:avr`, (error, stdout, stderr) => {
                             if (error) {
                                 console.error(`Error installing Arduino compiler: ${error}`);
