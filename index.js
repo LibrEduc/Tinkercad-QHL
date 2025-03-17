@@ -116,6 +116,8 @@ function createWindow() {
 let selectedPort = null;
 let boardDetectionInterval;
 
+let previousBoards = [];
+
 function listArduinoBoards(browserWindow) {
     const { exec } = require('child_process');
     const arduinoCliPath = path.join(__dirname, './arduino/arduino-cli.exe');
@@ -143,6 +145,10 @@ function listArduinoBoards(browserWindow) {
                 return { port, boardName };
             });
 
+        // Check if the board list has changed
+        const hasChanges = boards.length !== previousBoards.length ||
+            JSON.stringify(boards) !== JSON.stringify(previousBoards);
+
         // Update the ports menu with available boards
         const currentMenu = Menu.getApplicationMenu();
         const template = currentMenu.items.map(item => {
@@ -169,8 +175,11 @@ function listArduinoBoards(browserWindow) {
         const newMenu = Menu.buildFromTemplate(template);
         Menu.setApplicationMenu(newMenu);
 
-        if (boards.length === 0 && browserWindow) {
-            showNotification(browserWindow, t.listPorts.notifications.noPorts);
+        if (hasChanges) {
+            if (boards.length === 0 && browserWindow) {
+                showNotification(browserWindow, t.listPorts.notifications.noPorts);
+            }
+            previousBoards = boards;
         }
     });
 }
@@ -472,15 +481,20 @@ function showNotification(browserWindow, message) {
                     notification.style.textAlign = 'center';
                     notification.style.whiteSpace = 'pre-wrap';
                     notification.textContent = "${escapedMessage}";
-
+                    notification.style.cursor = 'pointer';
+                    notification.addEventListener('click', () => {
+                        notification.style.opacity = '0';
+                        setTimeout(() => notification.remove(), 300);
+                    });
+                    
                     document.body.appendChild(notification);
-
+                    
                     // Trigger reflow
                     notification.offsetHeight;
-
+                    
                     // Show notification
                     notification.style.opacity = '1';
-
+                    
                     // Remove after 3 seconds
                     setTimeout(() => {
                         notification.style.opacity = '0';
