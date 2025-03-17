@@ -12,6 +12,16 @@
       },
       "quit": "Quit"
     },
+    "installLibrary": {
+      "label": "Install Library",
+      "prompt": "Enter library name:",
+      "notifications": {
+        "progress": "Installing library...",
+        "success": "Library installed successfully",
+        "error": "Error installing library",
+        "empty": "Library name cannot be empty"
+      }
+    },
     "copyCode": {
       "label": "Copy code",
       "notifications": {

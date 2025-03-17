@@ -12,6 +12,16 @@
       },
       "quit": "Quitter"
     },
+    "installLibrary": {
+      "label": "Installer une bibliothèque",
+      "prompt": "Entrez le nom de la bibliothèque :",
+      "notifications": {
+        "progress": "Installation de la bibliothèque en cours...",
+        "success": "Bibliothèque installée avec succès",
+        "error": "Erreur lors de l'installation de la bibliothèque",
+        "empty": "Le nom de la bibliothèque ne peut pas être vide"
+      }
+    },
     "copyCode": {
       "label": "Copier le code",
       "notifications": {

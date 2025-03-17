@@ -220,7 +220,8 @@ function switchLanguage(locale) {
                               .map(pre => pre.textContent.normalize())
                               .join('\\r\\n')
                               .replace(/[\u2018\u2019\u201C\u201D]/g, '"') // Replace smart quotes
-                              .replace(/[\u2013\u2014]/g, '-'); // Replace em/en dashes
+                              .replace(/[\u2013\u2014]/g, '-') // Replace em/en dashes
+                              .replace(/[\u200B]/g, ''); // Replace zerowidth spaces
                             
                             return codeText && codeText !== 'undefined' ? codeText : 'empty';
                           })()
@@ -268,22 +269,6 @@ function switchLanguage(locale) {
         {
             label: 'Arduino',
             submenu: [
-                {
-                    label: t.file.installArduino.label,
-                    click: (menuItem, browserWindow) => {
-                        const { exec } = require('child_process');
-                        const arduinoCliPath = path.join(__dirname, './arduino/arduino-cli.exe');
-                        exec(`"${arduinoCliPath}" core install arduino:avr`, (error, stdout, stderr) => {
-                            if (error) {
-                                console.error(`Error installing Arduino compiler: ${error}`);
-                                showNotification(browserWindow, t.file.installArduino.notifications.error);
-                                return;
-                            }
-                            showNotification(browserWindow, t.file.installArduino.notifications.success);
-                        });
-                    }
-                },
-                { type: 'separator' },
                 {
                     label: t.uploadCode.label,
                     click: (menuItem, browserWindow) => {
@@ -365,6 +350,25 @@ function switchLanguage(locale) {
                             showNotification(browserWindow, t.copyCode.notifications.error);
                         });
                     }
+                },
+                { type: 'separator' },
+                {
+                    label: t.file.installArduino.label,
+                    click: (menuItem, browserWindow) => {
+                        const { exec } = require('child_process');
+                        const arduinoCliPath = path.join(__dirname, './arduino/arduino-cli.exe');
+                        exec(`"${arduinoCliPath}" core install arduino:avr`, (error, stdout, stderr) => {
+                            if (error) {
+                                console.error(`Error installing Arduino compiler: ${error}`);
+                                showNotification(browserWindow, t.file.installArduino.notifications.error);
+                                return;
+                            }
+                            showNotification(browserWindow, t.file.installArduino.notifications.success);
+                        });
+                    }
+                },
+                {
+                    label: t.file.installLibrary.label
                 }
             ]
         },
