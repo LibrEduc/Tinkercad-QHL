@@ -76,6 +76,23 @@
         button:active {
             background: #004080;
         }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+        }
+
+        .button-group button:first-child {
+            background: #666;
+        }
+
+        .button-group button:first-child:hover {
+            background: #555;
+        }
+
+        .button-group button:first-child:active {
+            background: #444;
+        }
     </style>
 </head>
 <body>
@@ -84,10 +101,57 @@
         <button class="close-button" onclick="window.api.closeWindow()">✕</button>
     </div>
     <div class="content">
-        <input type="text" id="libraryName" placeholder="Enter library name" autofocus>
-        <button onclick="submitLibrary()">Install</button>
+        <input type="text" id="libraryName" placeholder="" autofocus>
+        <div class="button-group">
+            <button id="submitBtn"></button>
+            <button id="cancelBtn"></button>
+        </div>
     </div>
     <script>
+        // Load translations from the main process
+        async function loadTranslations() {
+            try {
+                const translationPromises = {
+                    prompt: window.api.getTranslation('menu.installLibrary.prompt'),
+                    submitLabel: window.api.getTranslation('menu.installLibrary.label'),
+                    cancelLabel: window.api.getTranslation('menu.file.quit'),
+                    title: window.api.getTranslation('menu.installLibrary.label')
+                };
+
+                // Wait for all translations to be resolved
+                const translations = await Promise.all([
+                    translationPromises.prompt,
+                    translationPromises.submitLabel,
+                    translationPromises.cancelLabel,
+                    translationPromises.title
+                ]).then(([prompt, submitLabel, cancelLabel, title]) => ({
+                    prompt,
+                    submitLabel,
+                    cancelLabel,
+                    title
+                }));
+
+                const libraryInput = document.getElementById('libraryName');
+                const submitBtn = document.getElementById('submitBtn');
+                const cancelBtn = document.getElementById('cancelBtn');
+
+                // Set translations only after all promises are resolved
+                libraryInput.placeholder = translations.prompt;
+                submitBtn.textContent = translations.submitLabel;
+                cancelBtn.textContent = translations.cancelLabel;
+                document.title = translations.title;
+
+                // Add click handlers
+                submitBtn.onclick = submitLibrary;
+                cancelBtn.onclick = () => window.api.closeWindow();
+            } catch (error) {
+                console.error('Error loading translations:', error);
+            }
+        }
+
+        // Call loadTranslations immediately
+        loadTranslations();
+
         function submitLibrary() {
             const libraryName = document.getElementById('libraryName').value.trim();
             if (libraryName) {
@@ -100,6 +164,17 @@
                 submitLibrary();
             }
         });
+
+        // Apply translations when the page loads
+        document.addEventListener('DOMContentLoaded', loadTranslations);
+
+        // Listen for language changes and update translations
+        const cleanup = window.api.onLanguageChange(() => {
+            loadTranslations();
+        });
+
+        // Clean up the event listener when the window is closed
+        window.addEventListener('unload', cleanup);
     </script>
 </body>
 </html>

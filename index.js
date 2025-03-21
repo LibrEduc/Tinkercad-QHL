@@ -15,6 +15,20 @@ ipcMain.on('close-library-dialog', (event) => {
     if (win) win.close();
 });
 
+// Handle translation requests
+ipcMain.handle('get-translation', (event, key) => {
+    const keys = key.split('.');
+    let value = translations;
+    for (const k of keys) {
+        if (!value || typeof value !== 'object') {
+            console.warn(`Translation key not found: ${key}`);
+            return key;
+        }
+        value = value[k];
+    }
+    return value || key;
+});
+
 ipcMain.on('install-library', (event, libraryName) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     const mainWindow = BrowserWindow.getAllWindows().find(w => w !== win);
@@ -106,8 +120,16 @@ function createWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
-            sandbox: true
+            sandbox: true,
+            preload: path.join(__dirname, 'preload.js')
         }
+    });
+
+    // Close all windows when main window is closed
+    mainWindow.on('closed', () => {
+        BrowserWindow.getAllWindows().forEach(win => {
+            if (win !== mainWindow) win.close();
+        });
     });
 
     // Load Tinkercad website directly
@@ -233,7 +255,13 @@ app.on('window-all-closed', function () {
 function switchLanguage(locale) {
     // Load new translations
     const newTranslations = loadTranslations(locale) || loadTranslations('en');
+    translations = newTranslations; // Update global translations
     const t = newTranslations.menu;
+
+    // Notify all windows about the language change
+    BrowserWindow.getAllWindows().forEach(win => {
+        win.webContents.send('language-changed', locale);
+    });
 
     // Update menu template with new translations
     const template = [
