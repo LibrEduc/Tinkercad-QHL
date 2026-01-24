@@ -69,7 +69,8 @@
     },
     "help": {
       "label": "Aide",
-      "learnMore": "En savoir plus"
+      "learnMore": "En savoir plus",
+      "about": "À propos"
     }
   }
 }

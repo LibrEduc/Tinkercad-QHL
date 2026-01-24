@@ -51,7 +51,6 @@ ipcMain.on('install-library', (event, libraryName) => {
         if (win) win.close();
     });
 });
-//const path = require('path');
 const fs = require('fs');
 
 // Load translations
@@ -475,6 +474,19 @@ function switchLanguage(locale) {
         {
             label: t.help.label,
             submenu: [
+                {
+                    label: t.help.about,
+                    click: async () => {
+                        const { dialog } = require('electron');
+                        const packageInfo = require('./package.json');
+                        await dialog.showMessageBox({
+                            type: 'info',
+                            title: t.help.about,
+                            message: 'Tinkercad Desktop',
+                            detail: `Version: ${packageInfo.version}\nAuteur: ${packageInfo.author}\nDate: ${packageInfo.date}\nLicense: ${packageInfo.license}`
+                        });
+                    }
+                },
                 {
                     label: t.help.learnMore,
                     click: async () => {
