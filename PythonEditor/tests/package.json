@@ -1,0 +1,29 @@
+{
+  "description": "Tests for the Python Editor",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bbcmicrobit/PythonEditor/"
+  },
+  "engines": {
+    "node": ">=8.5",
+    "npm": ">=6.0"
+  },
+  "scripts": {
+    "test": "jest",
+    "test:watch": "npm t -- --watch",
+    "test:coverage": "npm t -- --coverage",
+    "test:ci": "npm t -- --ci --colors"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@babel/runtime": "^7.7.2",
+    "@wordpress/jest-puppeteer-axe": "1.7.0",
+    "axe-core": "3.4.2",
+    "axe-puppeteer": "1.0.0",
+    "jest": "^26.6.3",
+    "node-static": "^0.7.11",
+    "puppeteer": "^7.1.0",
+    "tmp": "^0.1.0"
+  }
+}

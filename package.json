@@ -1,12 +1,13 @@
 {
-  "name": "local-tinkercad",
-  "version": "1.0.0",
+  "name": "Tinkercad QHL",
+  "version": "1.2.0",
   "main": "index.js",
-  "date": "2025-01-01",
+  "date": "2026-02-01",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron .",
-    "build": "electron-builder --win zip"
+    "build": "electron-builder --win zip",
+    "monitor-microbit": "node scripts/monitor_microbit_drive.js"
   },
   "keywords": [],
   "author": "Sébastien Canet",
@@ -14,13 +15,13 @@
   "type": "commonjs",
   "description": "",
   "devDependencies": {
-    "electron": "^40.0.0",
-    "electron-builder": "^26.4.0",
+    "electron": "^40.1.0",
+    "electron-builder": "^26.7.0",
     "sharp": "^0.34.5"
   },
   "build": {
     "appId": "com.tinkercad.desktop",
-    "productName": "Tinkercad Desktop",
+    "productName": "Tinkercad QHL",
     "directories": {
       "output": "dist"
     },
@@ -46,11 +47,19 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "microbit",
+        "to": "../microbit",
+        "filter": [
+          "**/*"
+        ]
       }
     ]
   },
   "dependencies": {
     "electron-prompt": "^1.7.0",
-    "winreg": "^1.2.5"
+    "winreg": "^1.2.5",
+    "@microbit/microbit-fs": "^0.10.0"
   }
 }

@@ -1,0 +1,22 @@
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.swp
+
+# Temp directory used for unit testing
+tests/spec/test-files/temp-test-files/
+
+# Node
+node_modules/
+
+# vscode
+.history
+.vscode/settings.json

@@ -1,0 +1,66 @@
+<xml xmlns="http://www.w3.org/1999/xhtml">
+<block type="test_handler_arguments3">
+<value name="HANDLER_DRAG_PARAM_c">
+<block type="variables_get_reporter">
+<mutation duplicateondrag="true" />
+<field name="VAR">hello</field>
+</block>
+</value>
+<value name="HANDLER_DRAG_PARAM_d">
+<block type="variables_get_reporter">
+<mutation duplicateondrag="true" />
+<field name="VAR">goodbye</field>
+</block>
+</value>
+<statement name="HANDLER">
+</statement>
+</block>
+<block type="test_handler_arguments3">
+<value name="HANDLER_DRAG_PARAM_c">
+<block type="variables_get_reporter">
+<mutation duplicateondrag="true" />
+<field name="VAR">sure</field>
+</block>
+</value>
+<value name="HANDLER_DRAG_PARAM_d">
+<block type="variables_get_reporter">
+<mutation duplicateondrag="true" />
+<field name="VAR">whatever</field>
+</block>
+</value>
+<statement name="HANDLER">
+</statement>
+</block>
+<block type="test_handler_arguments3">
+<value name="HANDLER_DRAG_PARAM_c">
+<block type="variables_get_reporter">
+<mutation duplicateondrag="true" />
+<field name="VAR">okay</field>
+</block>
+</value>
+<value name="HANDLER_DRAG_PARAM_d">
+<block type="variables_get_reporter">
+<mutation duplicateondrag="true" />
+<field name="VAR">d</field>
+</block>
+</value>
+<statement name="HANDLER">
+</statement>
+</block>
+<block type="test_handler_arguments3">
+<value name="HANDLER_DRAG_PARAM_c">
+<block type="variables_get_reporter">
+<mutation duplicateondrag="true" />
+<field name="VAR">c</field>
+</block>
+</value>
+<value name="HANDLER_DRAG_PARAM_d">
+<block type="variables_get_reporter">
+<mutation duplicateondrag="true" />
+<field name="VAR">d</field>
+</block>
+</value>
+<statement name="HANDLER">
+</statement>
+</block>
+</xml>

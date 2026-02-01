@@ -1,4 +1,4 @@
-# Tinkercad Desktop
+# Tinkercad QHL
 
 Application desktop Electron qui intègre Tinkercad (Autodesk) avec des fonctionnalités Arduino pour compiler et téléverser du code directement depuis l'interface.
 
@@ -6,7 +6,7 @@ Application desktop Electron qui intègre Tinkercad (Autodesk) avec des fonction
 
 ## 📋 Description
 
-Tinkercad Desktop est une application qui permet d'utiliser Tinkercad dans une fenêtre desktop native, avec des fonctionnalités supplémentaires pour travailler avec Arduino. L'application intègre Arduino CLI pour compiler et téléverser vos sketches directement depuis l'éditeur de code de Tinkercad.
+Tinkercad QHL (Quasi Hors Ligne) est une application qui permet d'utiliser Tinkercad dans une fenêtre desktop native, avec des fonctionnalités supplémentaires pour travailler avec Arduino. L'application intègre Arduino CLI pour compiler et téléverser vos sketches directement depuis l'éditeur de code de Tinkercad.
 
 ## ✨ Fonctionnalités
 
@@ -81,7 +81,7 @@ Les contributions sont les bienvenues ! N'hésitez pas à ouvrir une issue ou un
 
 ---
 
-# Tinkercad Desktop
+# Tinkercad QHL
 
 Electron desktop application that integrates Tinkercad (Autodesk) with Arduino features to compile and upload code directly from the interface.
 
@@ -89,7 +89,7 @@ Electron desktop application that integrates Tinkercad (Autodesk) with Arduino f
 
 ## 📋 Description
 
-Tinkercad Desktop is an application that allows you to use Tinkercad in a native desktop window, with additional features for working with Arduino. The application integrates Arduino CLI to compile and upload your sketches directly from the Tinkercad code editor.
+Tinkercad QHL ('Quasi Hors Ligne', french Almost Offline), is an application that allows you to use Tinkercad in a native desktop window, with additional features for working with Arduino. The application integrates Arduino CLI to compile and upload your sketches directly from the Tinkercad code editor.
 
 ## ✨ Features
 

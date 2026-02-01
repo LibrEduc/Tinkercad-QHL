@@ -1,0 +1,47 @@
+{
+  "name": "makecode-arcade-kiosk",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@types/node": "^16.11.33",
+    "howler": "^2.2.3",
+    "html5-qrcode": "^2.2.6",
+    "idb": "^7.1.1",
+    "nanoid": "^4.0.2",
+    "qrcode.react": "^3.1.0",
+    "react-scripts": "5.0.1",
+    "swiper": "^8.4.4",
+    "tslib": "^2.6.2",
+    "typescript": "^4.6.4"
+  },
+  "scripts": {
+    "prestart": "node ./scripts/linkfonts.js",
+    "start": "react-app-rewired start",
+    "prebuild": "node ./scripts/linkfonts.js",
+    "build": "react-app-rewired build",
+    "prettier": "prettier --write \"src/**/{*.ts,*.tsx}\""
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "@types/howler": "^2.2.8",
+    "@types/qrcode": "^1.5.0",
+    "@types/react": "file:../node_modules/@types/react",
+    "@types/react-dom": "file:../node_modules/@types/react-dom",
+    "html-webpack-plugin": "^5.5.0",
+    "node-polyfill-webpack-plugin": "^2.0.1",
+    "prettier": "^2.7.1",
+    "react-app-alias-ex": "^2.1.0",
+    "react-app-rewired": "^2.2.1"
+  }
+}

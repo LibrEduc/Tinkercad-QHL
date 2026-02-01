@@ -23,30 +23,30 @@
       }
     },
     "copyCode": {
-      "label": "Copier le code",
+      "label": "Copier le programme",
       "notifications": {
-        "success": "Code copié dans le presse-papier",
-        "empty": "Ouvrir le volet de programme textuel pour copier le code",
-        "error": "Erreur lors de la copie du code"
+        "success": "programme copié dans le presse-papier",
+        "empty": "Ouvrir le volet de programme textuel pour copier le programme",
+        "error": "Erreur lors de la copie du programme"
       }
     },
     "uploadCode": {
-      "label": "Téléverser le code",
+      "label": "Téléverser le programme",
       "notifications": {
         "progress": "Téléversement en cours...",
-        "success": "Code téléversé avec succès",
-        "error": "Erreur lors du téléversement du code",
+        "success": "Programme téléversé avec succès",
+        "error": "Erreur lors du téléversement du programme",
         "noPort": "Aucun port COM sélectionné",
         "falsePort": "Le port COM ne semble pas être correct",
         "file": "Erreur d'écriture du fichier"
       }
     },
     "compileCode": {
-      "label": "Compile le code",
+      "label": "Compiler le programme",
       "notifications": {
         "progress": "Compilation en cours...",
-        "success": "Code compilé avec succès",
-        "error": "Erreur lors de la compilation du code"
+        "success": "Programme compilé avec succès",
+        "error": "Erreur lors de la compilation du programme"
       }
     },
     "listPorts": {
@@ -55,6 +55,59 @@
         "noPorts": "Aucune carte Arduino trouvée",
         "error": "Erreur lors de la liste des cartes Arduino",
         "portSelected": "Port sélectionné : {port}"
+      }
+    },
+    "microbit": {
+      "label": "micro:bit",
+      "listBoards": "Lister les cartes disponibles",
+      "detect": "Détection",
+      "install": "Installer MicroPython hors-ligne",
+      "showConverted": "Afficher le code converti",
+      "upload": "Téléverser le programme",
+      "notifications": {
+        "found": "micro:bit détectée sur {drive}",
+        "notFound": "Aucune micro:bit détectée",
+        "noDrive": "Aucune micro:bit sélectionnée",
+        "uploadProgress": "Téléversement vers micro:bit en cours...",
+        "uploadSuccess": "Programme téléversé sur micro:bit",
+        "uploadSuccessDetailed": "Téléversement réussi !\nLe programme a été flashé sur la micro:bit.",
+        "uploadError": "Erreur lors du téléversement vers micro:bit",
+        "uploadErrorFileNotProcessed": "Le fichier n'a pas été traité par la carte.\nVérifiez que la carte est bien connectée et réessayez.",
+        "uploadErrorUnknown": "Erreur de téléversement - résultat inconnu",
+        "uploadProgressHexWritten": "Fichier HEX écrit sur la carte.\nVérification du téléversement en cours...",
+        "invalidCode": "Le code n'est pas un fichier .hex compilé",
+        "installProgress": "Installation des runtimes MicroPython...",
+        "installSuccess": "Runtimes V1 et V2 installés",
+        "installPartial": "Runtime MicroPython partiellement installé (V1 ou V2)",
+        "installPartialDetails": "V1: {v1Status}, V2: {v2Status}",
+        "installError": "Impossible d'installer les runtimes MicroPython (vérifiez les droits d'écriture)",
+        "installErrorMissing": "Fichiers HEX MicroPython introuvables. Utilisez \"Micro:bit > Installer les runtimes\" pour les télécharger.",
+        "cachePath": "Cache: {path}",
+        "installManual": "Runtimes introuvables en ligne. Placez MICROBIT.hex (V2) et/ou MICROBIT_V1.hex (V1) dans le cache.",
+        "v1Ok": "V1: OK",
+        "v1Missing": "V1: Manquant",
+        "v2Ok": "V2: OK",
+        "v2Missing": "V2: Manquant"
+      },
+      "convertedCode": {
+        "title": "Code MicroPython Converti",
+        "description": "Ce code a été automatiquement converti depuis MakeCode Python vers MicroPython standard",
+        "copyButton": "Copier le code",
+        "closeButton": "Fermer",
+        "copySuccess": "Code copié dans le presse-papiers !",
+        "noCodeFound": "Aucun code trouvé dans l'éditeur",
+        "errorRetrieving": "Erreur lors de la récupération du code: {error}",
+        "validationErrors": "Erreurs détectées dans le code converti:\n\n{errors}",
+        "validationErrorsStandard": "Erreurs détectées dans le code:\n\n{errors}",
+        "errorLine": "Ligne {line}: {message}"
+      },
+      "validation": {
+        "indentationError": "Erreur d'indentation: ligne attendue après \":\"",
+        "unbalancedParentheses": "Parenthèses non équilibrées ({count})",
+        "unbalancedBrackets": "Crochets non équilibrés ({count})",
+        "unbalancedBraces": "Accolades non équilibrées ({count})",
+        "missingImportMusic": "Import manquant: ajoutez \"import music\" ou \"from microbit import *\"",
+        "missingImportRadio": "Import manquant: ajoutez \"import radio\" ou \"from microbit import *\""
       }
     },
     "view": {

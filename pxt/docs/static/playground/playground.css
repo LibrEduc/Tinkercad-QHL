@@ -1,0 +1,17 @@
+#sample-select {
+    margin-right: 0.5rem;
+}
+
+#monaco-editor {
+    height: 100%;
+    width: 55%;
+    max-width: 660px;
+}
+
+#sample-container {
+    width: 20rem;
+}
+
+#run-container {
+    margin-left: min(calc(55% - 20rem), calc(660px - 20rem));
+}

@@ -1,0 +1,909 @@
+/* -------- GLOBAL-ISH STYLING -------- */
+/* ----------------------------------- */
+:root {
+    --button-primary-color: transparent;
+    --button-border-color: rgba(118, 174, 197, 1);
+    --button-focus-background-color: rgba(118, 174, 197, 1);
+    --main-text-color: #ffffff;
+    --qr-code-button-color: #247aa0cf;
+    --secondary-dark-color: #13455acf;
+    --secondary-dark-color-opaque: #13455a;
+    --high-score-color: #8afff8;
+    --high-score-selector-color: rgba(219, 255, 1, 1);
+    --main-text-color: #ffffff;
+    --transparent-color: #11ffee00;
+    --black-color: #050505;
+    --white-color: #ffffff;
+    --input-outline: #e5e7eb;
+    --button-underline: #10b7e5;
+    --game-tile-outline: #aff1ff3d;
+    --game-selected-outline: #aff1ffaa;
+    --error-color: #ff7676;
+    --black-color-transparent: #050505ab;
+    --modalFooterBackgroundColor: #f9fafb;
+    --error-modal-transparent: #340000ab;
+}
+
+* {
+    box-sizing: border-box;
+    user-select: none;
+}
+
+*:focus {
+    outline: none;
+}
+
+html,
+body {
+    height: 100vh;
+    width: 100vw;
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+    font-family: "Press Start 2P";
+    color: var(--main-text-color);
+}
+
+button, a, input[type="submit"] {
+    color: var(--main-text-color);
+}
+
+.background-flat {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: var(--black-color);
+    z-index: -100;
+}
+
+.background-acrylic {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+    background-size: 100vw 100vh;
+    background-repeat: no-repeat;
+    background-color: var(--black-color);
+    background-attachment: fixed;
+    transition: background 1s;
+    z-index: -100;
+}
+
+.background-acrylic::before {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    backdrop-filter: blur(25px);
+    content: "";
+    z-index: -100;
+}
+
+.background-acrylic::after {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    content: "";
+    opacity: 0.75;
+    background: #000000;
+    z-index: -100;
+}
+
+#root {
+    width: 100vw;
+    height: 100vh;
+}
+
+h1 {
+    font-weight: 400;
+    font-size: 3.375em;
+    line-height: 3.375rem;
+    text-align: center;
+}
+
+h2 {
+    font-weight: 400;
+    font-size: 2.75em;
+    line-height: 2.75rem;
+    text-align: center;
+}
+
+.sim-embed {
+    width: 100%;
+    height: 100%;
+    top: 0;
+    position: absolute;
+    border: 0;
+}
+
+.footer {
+    position: fixed;
+    /* These numbers are relative to the size of the footer.png logo */
+    height: 6vh;
+    width: 20%;
+    left: 1.5%;
+    bottom: 0;
+    background: url("footer.png");
+    background-repeat: no-repeat;
+    background-size: 100%;
+}
+
+/* -------- MAIN MENU STYLING -------- */
+/* ----------------------------------- */
+
+.mainMenu {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.mainMenuHeader {
+    font-weight: 400;
+    font-size: 2.25rem;
+    grid-area: 1 / 2 / 2 / 4;
+    text-transform: uppercase;
+}
+
+.mainMenuTopBar {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: 1fr;
+    width: 100%;
+}
+
+.locked {
+    margin-left: 0;
+}
+
+.kioskCode {
+    user-select: text;
+}
+
+.kioskButton {
+    padding: 1rem 1rem;
+    font-family: "Press Start 2P";
+    font-size: 0.84rem;
+    letter-spacing: 0.2rem;
+    background-color: var(--button-primary-color);
+    border-radius: 0.625rem;
+    border: solid 2px var(--button-border-color);
+    cursor: pointer;
+}
+
+.kioskButton:focus {
+    /*border:var(--high-score-selector-color) 0.5rem solid;*/
+    background-color: var(--button-focus-background-color);
+}
+
+.kioskButton:hover {
+    /*border:var(--high-score-selector-color) 0.5rem solid;*/
+    background-color: var(--button-focus-background-color);
+}
+
+.kioskButton:not(:focus) {
+    /*border: var(--transparent-color) 0.5rem solid;
+    border-bottom: 0.5rem var(--button-underline) solid;*/
+}
+
+.mainMenuButton {
+    grid-area: 1 / 4 / 2 / 5;
+    margin-top: 2rem;
+}
+
+.gameMenu {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: absolute;
+    right: 0;
+    bottom: -4.5rem;
+}
+
+.deleteGame {
+    letter-spacing: 0.2rem;
+    font-family: inherit;
+    border: none;
+    text-align: center;
+    color: var(--error-color);
+    font-size: 0.75rem;
+    display: flex;
+    flex-direction: row;
+    background-color: transparent;
+    border-radius: 0.3em;
+    border-color: var(--transparent-color);
+    border: var(--transparent-color) 2px solid;
+    cursor: pointer;
+    z-index: 10;
+    width: fit-content;
+}
+
+.deleteGame:focus {
+    border: var(--error-color) 2px solid;
+}
+
+.deleteGame:hover {
+    border: var(--error-color) 2px solid;
+}
+
+.deleteGame svg {
+    width: 1.25rem;
+    height: 2rem;
+    fill: var(--error-color);
+    margin-right: 1rem;
+}
+
+.deleteGame p {
+    display: inline;
+}
+
+.gameTile .deleted {
+    display: none;
+}
+
+@keyframes shrink {
+    from {
+        transform: scale(1);
+        height: 100%;
+    }
+    to {
+        transform: scale(0.0001);
+        height: 0;
+    }
+}
+
+@media only screen and (max-width: 1200px) {
+    .mainMenuHeader {
+        font-weight: 400;
+        font-size: 1.75rem;
+    }
+}
+
+/* Switch to a scrollable vertical view at 800px breakpoint */
+@media only screen and (max-width: 800px) {
+    body {
+        overflow: auto;
+    }
+    .addGameContent {
+        flex-direction: column !important;
+    }
+}
+
+/* -------- ADDING GAME PAGE STYLING -------- */
+/* ----------------------------------- */
+
+.addInstructions h2 {
+    font-size: 1.5rem;
+    margin: 0;
+}
+
+.addInstructions li {
+    padding: 1em 0;
+    margin-left: 1.5rem;
+    font-size: 1rem;
+}
+
+.addInstructions {
+    display: flex;
+    flex-direction: column;
+    align-items: baseline;
+    line-height: 200%;
+}
+
+.addGame h1 {
+    font-size: 2.25rem;
+    font-weight: 400;
+}
+
+.addGame {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+}
+
+.innerQRCodeContent {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    background-color: var(--button-focus-background-color);
+    border-radius: 0.625rem;
+    flex-basis: 0;
+    padding: 1rem;
+    min-width: fit-content;
+}
+
+.kioskLink button {
+    overflow: auto;
+    overflow-wrap: break-word;
+    text-decoration: underline;
+    line-height: 1.1rem;
+    max-width: 16rem;
+}
+
+.kioskLink {
+    max-width: 16rem;
+}
+
+.innerQRCodeContent h3 {
+    text-align: center;
+    margin: 0;
+}
+
+.innerQRCodeContent h1 {
+    text-align: center;
+    font-size: 2rem;
+}
+
+.addGameContent {
+    display: flex;
+    flex-direction: row;
+    width: 95%;
+    margin: 0 0 1rem 0;
+    gap: 1rem;
+}
+
+.innerQRCodeContent p {
+    line-height: 1.5rem;
+    margin-top: 2rem;
+    text-align: center;
+}
+
+/* -------- QR PAGES STYLING -------- */
+/* ----------------------------------- */
+
+.scanQrPage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    height: 100vh;
+    padding: 0 1rem;
+}
+
+.scanInstructions {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.qrOption {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 95%;
+}
+
+.scanQrPage h2 {
+    font-size: 2rem;
+}
+
+.scanQrButton {
+    padding: 1.25em 1em;
+    font-family: inherit;
+    letter-spacing: 0.2rem;
+    background-color: var(--button-focus-background-color);
+    border-radius: 0.3em;
+    border-color: var(--transparent-color);
+    border-bottom: 0.5rem var(--button-underline) solid;
+    cursor: pointer;
+    margin-right: 1rem;
+    margin-top: 2rem;
+}
+
+.scanning {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+}
+
+.scanQrButton:hover {
+    cursor: pointer;
+}
+
+.qrScanner-label {
+    background-color: var(--main-text-color);
+    color: var(--secondary-dark-color);
+    padding: 2vh;
+    border-radius: 1.5vh;
+}
+
+.qrScannerHolder {
+    width: 45vw;
+    height: 30vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.scanIntro {
+    overflow-wrap: break-word;
+    text-align: center;
+    line-height: 1.5rem;
+}
+
+.qrSuccess {
+    width: 100%;
+    height: 90%;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    font-size: 1.5em;
+    letter-spacing: 0.25em;
+    line-height: 1.5em;
+}
+
+.linkOption {
+    border-color: var(--button-border-color);
+    border-style: solid;
+    border-radius: 0.625rem;
+    padding: 2rem;
+    width: 350px;
+}
+
+.linkOption label {
+    display: block;
+}
+
+.linkOption input[type="url"] {
+    margin-top: 1rem;
+    border-color: var(--button-border-color);
+    width: 67%;
+    height: 2em;
+    border-radius: 0.45em;
+    text-overflow: ellipsis;
+}
+
+.linkOption input[type="submit"] {
+    margin-left: 0.25rem;
+    height: 2em;
+    border-radius: 0.45em;
+    background-color: var(--button-primary-color);
+    font-weight: 600;
+    letter-spacing: 0.25em;
+    border-style: solid;
+    border-color: var(--button-border-color);
+    cursor: pointer;
+}
+
+.linkOption input[type="submit"]:focus {
+    background-color: var(--button-focus-background-color);
+}
+
+.linkOption input[type="submit"]:hover {
+    background-color: var(--button-focus-background-color);
+}
+
+.linkError {
+    font-family: "Share";
+    color: var(--error-color);
+}
+
+.shareHelp button {
+    overflow: auto;
+    overflow-wrap: break-word;
+    text-decoration: underline;
+    border: none;
+    line-height: 1.1rem;
+    font-size: 0.75rem;
+}
+
+.shareHelp {
+    margin: 2rem 0 0 0;
+}
+
+.scanTip {
+    overflow-wrap: break-word;
+    font-family: "Share";
+    font-size: 1.25rem;
+    margin-top: 2rem;
+}
+
+@media (max-width: 768px) {
+    .scanQrPage h2 {
+        font-size: 1.5rem;
+    }
+}
+
+@media (max-width: 570px) {
+    .linkOption {
+        width: 80%;
+    }
+}
+
+/* -------- GAME LIST STYLING -------- */
+/* ----------------------------------- */
+
+.carouselWrap {
+    width: 100vw;
+    height: 100vh;
+}
+
+.swiper-pagination {
+    position: relative;
+    pointer-events: none;
+    left: -23%;
+    top: 1.4rem;
+}
+
+.swiper {
+    width: 100%;
+    height: 85%;
+    overflow: visible !important;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    outline: none;
+}
+
+.swiper-wrapper {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+}
+
+.swiper-slide {
+    position: relative;
+    transform: scale(0.75);
+    top: -10%;
+}
+
+.swiper-slide.swiper-slide-next {
+    position: relative;
+    transform: scale(0.75) !important;
+    top: -10%;
+}
+
+.swiper-slide.swiper-slide-prev {
+    position: relative;
+    transform: scale(0.75) !important;
+    top: -10%;
+}
+
+.swiper-slide.swiper-slide-active {
+    cursor: pointer;
+    transform: scale(1);
+    top: 0;
+}
+
+.gameTile {
+    width: 100%;
+    height: 100%;
+    image-rendering: optimizeSpeed;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: optimize-contrast;
+    image-rendering: pixelated;
+    -ms-interpolation-mode: nearest-neighbor;
+    border: var(--game-tile-outline) 1px solid;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: 1fr;
+    grid-column-gap: 0;
+    grid-row-gap: 0;
+}
+
+.gameSelectionIndicator {
+    display: none;
+    border: solid 0.75rem var(--high-score-selector-color);
+    position: absolute;
+    pointer-events: none;
+    left: -0.75rem;
+    top: -0.75rem;
+    right: -0.75rem;
+    bottom: -0.75rem;
+}
+
+.swiper:focus .swiper-slide-active .gameSelectionIndicator {
+    display: block;
+}
+
+.pressStart {
+    grid-area: 1 / 2 / 2 / 3;
+    align-self: end;
+    justify-self: center;
+    padding: 1rem;
+    text-align: center;
+    line-height: 115%;
+    position: absolute;
+    bottom: -4.5rem;
+    left: 0;
+    right: 0;
+}
+
+.gameThumbnail {
+    background-size: 100% 100%;
+    background-repeat: no-repeat;
+    grid-area: 1 / 1 / 2 / 5;
+}
+
+.swiper-slide-active .gameThumbnail {
+    grid-area: 1 / 1 / 2 / 4;
+}
+
+.swiper-slide-active .gameDetails {
+    padding-left: 1rem;
+    background-color: var(--black-color);
+    grid-area: 1 / 4 / 2 / 5;
+    display: grid;
+    grid-template-columns: 1fr;
+}
+
+.gameDetails hr {
+    width: 90%;
+    margin-top: 1.5rem;
+}
+
+.gameDetails {
+    display: none;
+}
+
+.gameTitle {
+    margin-top: 2rem;
+    font-size: 1.25rem;
+    line-height: 1.5rem;
+    grid-area: 1 / 1 / 2 / 2;
+}
+
+.gameDescription {
+    font-family: "Share";
+    font-size: 1.25em;
+    grid-area: 2 / 1 / 4 / 2;
+}
+
+.gameHighScores {
+    grid-area: 4 / 1 / 6 / 2;
+}
+
+.gameDate {
+    font-family: "Share";
+    font-size: 1.05em;
+    grid-area: 5 / 1 / 6 / 2;
+    align-self: end;
+    margin-bottom: 2rem;
+}
+
+.gameHighScoreHeader {
+    font-size: 1rem;
+    line-height: 1.5rem;
+    text-align: left;
+}
+
+.gameHighScoreContent {
+    line-height: 1.25rem;
+    font-size: 0.85rem;
+}
+
+.gameHighScoreScore {
+    margin-left: 2.5rem;
+}
+
+@media only screen and (min-width: 1920px) {
+    .swiper-slide-active .gameDetails {
+        padding: 6rem 2rem;
+    }
+
+    .gameHighScoreHeader {
+        font-size: 1.15rem;
+    }
+
+    .gameHighScoreContent {
+        font-size: 0.9rem;
+    }
+}
+
+@media only screen and (max-width: 1490px) and (max-height: 715px) {
+    .gameTitle {
+        margin-top: 1.5rem;
+        font-size: 1rem;
+    }
+
+    .gameDescription {
+        font-size: 1rem;
+    }
+
+    .gameHighScoreHeader {
+        font-size: 1rem;
+    }
+
+    .gameHighScoreContent {
+        font-size: 0.75rem;
+    }
+}
+
+/* -------- HIGH SCORE STYLING -------- */
+/* ----------------------------------- */
+
+.enterHighScore {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 90%;
+}
+
+.highScoreContent {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: right;
+    width: 90%;
+}
+
+.highScoreInstructions {
+    width: 30%;
+    line-height: 1.5em;
+    font-family: "Share";
+    font-size: 1.25em;
+    margin-left: 10%;
+}
+
+.highScoreHighlight {
+    background-color: var(--high-score-selector-color);
+}
+
+.highScoreList {
+    font-size: 2.2em;
+    color: var(--high-score-color);
+    line-height: 1.5em;
+    height: 80%;
+    margin-top: -1.5em;
+}
+
+.highScoreInitials {
+    margin-left: -1.25rem;
+}
+
+.highScoreScore {
+    margin-left: 3.5rem;
+}
+
+.enterHighScoreText {
+    color: var(--main-text-color);
+}
+
+.highScoreInitial {
+    display: inline-block;
+    text-align: center;
+}
+
+.highScoreInitialControl {
+    color: var(--main-text-color);
+}
+
+.highScoreInitialControlSelected {
+    color: var(--high-score-selector-color);
+}
+
+.highScoreInitialsScoreSpacer {
+    width: 3.125rem;
+}
+
+.highScoreScore {
+    text-align: right;
+}
+
+/* -------- GAME OVER STYLING -------- */
+/* ----------------------------------- */
+
+.gameOverButtons {
+    display: flex;
+    width: 90%;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-evenly;
+    margin: 5%;
+}
+
+.gameOverPage {
+    margin-top: 15%;
+}
+
+/* -------- DELETE MODAL STYLING -------- */
+/* ------------------------------------- */
+
+.common-modal-container {
+    position: fixed;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1000;
+    font-family: "Share";
+    background-color: var(--black-color-transparent);
+}
+
+.common-modal {
+    width: 50%;
+    max-width: 40rem;
+    overflow: hidden;
+    position: fixed;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 0 0.4rem var(--black-color-transparent);
+    border: 2px solid rgba(34, 36, 38);
+}
+
+.common-modal-header {
+    background-color: var(--secondary-dark-color-opaque);
+    display: flex;
+    font-size: 1.35rem;
+    font-weight: 600;
+    padding-left: 1.5rem;
+    border-bottom: 1px solid rgba(34, 36, 38, 0.15);
+    flex-shrink: 0;
+}
+
+.common-modal-title {
+    padding-top: 1.25rem;
+    padding-bottom: 1.25rem;
+    font-family: "Press Start 2P";
+}
+
+.common-modal-body {
+    background-color: var(--main-text-color);
+    color: var(--black-color);
+    min-height: 4rem;
+    padding: 1.25rem 1.5rem;
+}
+
+.common-modal-footer {
+    background-color: var(--secondary-dark-color-opaque);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    padding: 1rem;
+    border-top: 1px solid rgba(34, 36, 38, 0.15);
+}
+
+.common-modal-button {
+    font-family: "Share";
+    margin: 0 0.25rem 0 0;
+    padding: 0.8rem 2rem 0.95rem;
+    text-transform: none;
+    text-shadow: none;
+    font-weight: 600;
+    font-size: 1rem;
+    border: none;
+    border-radius: 0.25rem;
+    letter-spacing: 0.1rem;
+}
+
+/* -------- NOTIFICATION STYLING -------- */
+/* ------------------------------------- */
+
+.notification-container {
+    position: fixed;
+    display: flex;
+    align-items: baseline;
+    justify-content: right;
+    top: 85%;
+    left: 0;
+    right: 2%;
+    bottom: 0;
+    z-index: 1000;
+    font-family: "Share";
+    pointer-events: none;
+}
+
+.notification-contents {
+    border-radius: 0.285rem;
+    overflow: hidden;
+    position: fixed;
+    padding: 0 1rem;
+    pointer-events: none;
+    background-color: var(--button-focus-background-color);
+    border: 4px solid var(--button-border-color);
+}

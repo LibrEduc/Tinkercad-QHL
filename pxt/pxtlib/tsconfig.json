@@ -1,0 +1,27 @@
+{
+    "compilerOptions": {
+        "target": "es2017",
+        "noImplicitAny": true,
+        "noImplicitReturns": true,
+        "noImplicitThis": true,
+        "declaration": true,
+        "outFile": "../built/pxtlib.js",
+        "newLine": "LF",
+        "sourceMap": false,
+        "lib": [
+            "dom",
+            "dom.iterable",
+            "scripthost",
+            "es2017",
+            "ES2018.Promise",
+            "ES2021.String"
+        ],
+        "types": [
+            "highlight.js",
+            "marked",
+            "web-bluetooth"
+        ],
+        "incremental": true,
+        "skipLibCheck": true
+    }
+}

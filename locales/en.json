@@ -31,7 +31,7 @@
       }
     },
     "uploadCode": {
-      "label": "Upload code",
+      "label": "Upload program",
       "notifications": {
         "progress": "Upload in progress...",
         "success": "Code uploaded successfully",
@@ -55,6 +55,59 @@
         "noPorts": "No Arduino boards found",
         "error": "Error listing Arduino boards",
         "portSelected": "Selected port: {port}"
+      }
+    },
+    "microbit": {
+      "label": "micro:bit",
+      "listBoards": "List available boards",
+      "detect": "Detection",
+      "install": "Install MicroPython offline",
+      "showConverted": "Show converted code",
+      "upload": "Upload program",
+      "notifications": {
+        "found": "micro:bit detected on {drive}",
+        "notFound": "No micro:bit detected",
+        "noDrive": "No micro:bit selected",
+        "uploadProgress": "Uploading to micro:bit...",
+        "uploadSuccess": "Program uploaded to micro:bit",
+        "uploadSuccessDetailed": "Upload successful!\nThe program has been flashed to the micro:bit.",
+        "uploadError": "Error uploading to micro:bit",
+        "uploadErrorFileNotProcessed": "The file was not processed by the board.\nPlease check that the board is properly connected and try again.",
+        "uploadErrorUnknown": "Upload error - unknown result",
+        "uploadProgressHexWritten": "HEX file written to the board.\nChecking upload status...",
+        "invalidCode": "Code is not a compiled .hex file",
+        "installProgress": "Installing MicroPython runtimes...",
+        "installSuccess": "MicroPython V1 and V2 runtimes installed",
+        "installPartial": "MicroPython runtime partially installed (V1 or V2)",
+        "installPartialDetails": "V1: {v1Status}, V2: {v2Status}",
+        "installError": "Unable to install MicroPython runtimes (check write permissions)",
+        "installErrorMissing": "MicroPython HEX files not found. Use \"Micro:bit > Install runtimes\" to download them.",
+        "cachePath": "Cache: {path}",
+        "installManual": "Runtimes unavailable online. Place MICROBIT.hex (V2) and/or MICROBIT_V1.hex (V1) in the cache.",
+        "v1Ok": "V1: OK",
+        "v1Missing": "V1: Missing",
+        "v2Ok": "V2: OK",
+        "v2Missing": "V2: Missing"
+      },
+      "convertedCode": {
+        "title": "Converted MicroPython Code",
+        "description": "This code has been automatically converted from MakeCode Python to standard MicroPython",
+        "copyButton": "Copy code",
+        "closeButton": "Close",
+        "copySuccess": "Code copied to clipboard!",
+        "noCodeFound": "No code found in editor",
+        "errorRetrieving": "Error retrieving code: {error}",
+        "validationErrors": "Errors detected in converted code:\n\n{errors}",
+        "validationErrorsStandard": "Errors detected in code:\n\n{errors}",
+        "errorLine": "Line {line}: {message}"
+      },
+      "validation": {
+        "indentationError": "Indentation error: line expected after \":\"",
+        "unbalancedParentheses": "Unbalanced parentheses ({count})",
+        "unbalancedBrackets": "Unbalanced brackets ({count})",
+        "unbalancedBraces": "Unbalanced braces ({count})",
+        "missingImportMusic": "Missing import: add \"import music\" or \"from microbit import *\"",
+        "missingImportRadio": "Missing import: add \"import radio\" or \"from microbit import *\""
       }
     },
     "view": {

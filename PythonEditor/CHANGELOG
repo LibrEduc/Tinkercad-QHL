@@ -1,0 +1,290 @@
+2.2.2
+-----
+* Add support for new board IDs
+
+2.2.1
+-----
+* Update MicroPython to the final v2.0.0 release
+
+2.2.0
+-----
+* Updated existing translations
+* Added the following languages:
+    - French
+    - Korean
+    - Norwegian Nynorsk
+    - Portuguese
+    - Serbian
+* Shows a friendlier error message when the device is WebUSB connected in MAINTENANCE mode
+* No error modal shown during a WebUSB connection if the device is physically unplugged
+    - We assume this is purposeful action by the user and automatically disconnect
+* Fixed issues downloading the hex file in Internet Explorer
+* Dropped IE10 compatibility
+* Refactored the editor controller functionality into its own module
+* Added mobile features to the editor controller
+* Added a, by default disabled, experimental code checker
+* Fixed accessibility issue where beta option "Quick Flash" was not highlighted on selection
+* Fixed issue where iOS Chrome didn't download hex files
+* Unused shared functionality has been removed
+* Updated js library FileSaver to v2.0.5
+* Multiple updates and fixes in the tests system
+
+2.1.2
+-----
+* Update MicroPython to the v2.0.0-beta.5 release
+
+2.1.1
+-----
+* Update MicroPython to the v2.0.0-beta.3 release
+* Improve the error reporting for old DAPLink versions attempting to WebUSB connect
+* Fix WebUSB issue detecting the board ID
+
+2.1.0
+-----
+* Update MicroPython to the v2.0.0-beta.1 release
+* Updated microbit-fs to v0.9.0 release
+* Removed microbit-universal-hex library as microbit-fs generates Universal Hexes
+* Universal Hex generated with board ID 9901 for the v1 section
+* Translation system updated to be more robust to missing translations
+* Minor reorganisation of some js files
+
+2.1.0-beta.7
+------------
+* Update the MicroPython version to commit 44a75bb
+* Update the microbit-fs library to adebf8b
+* Add info message on the WebUSB modal when a full flash is performed
+* Minor updates in the tests
+* Other minor bug fixes
+
+2.1.0-beta.6
+------------
+* Update the MicroPython version to commit 3e09245a46
+* Add a message on the WebUSB modal when a full flash is performed
+* Other minor bug fixes
+
+2.1.0-beta.5
+------------
+* Adds support for the new micro:bit
+* Python Editor now generates Universal Hex files
+* Minor WebUSB improvement
+* Autocompletion adds the new API only when a new board is WebUSB connected
+* Hide "Quick Flash" entry in settings if WebUSB is not available
+* Reorganisation of files in the project
+* Updated the microbit-fs and microbit-uh libraries to the latest commit
+
+2.0.1
+-----
+* Added Chinese translations 🇨🇳 (#306 #316)
+* Fix issue downloading Python files in Safari (#298)
+* Accessibility improvements (#290 #299 #301 #304 #303 #302 #310 #313 #315)
+* Improve button text for readability by adding text shadow (#307)
+* Fix UI issue with the WebUSB connection spinner position (#300)
+* Fix issue with WebUSB error modal links not working (#317)
+* Focus the serial terminal when REPL button is pressed (#314)
+* WebUSB reliability improvements
+* Updates on the manual test checklist (#296)
+* Doc updates (#305)
+* Test updates (#326)
+
+2.0.0
+-----
+* Added Croatian language 🇭🇷 (#294)
+* Update help file with latest v2 UI changes (#292)
+* Internationalisation internal improvements (#287) (#293)
+* WebUSB internal improvements and fixes (#289) (#291)
+
+2.0.0-rc.1
+----------
+* RC.1 ships with the experimental features turned off and the same configuration as it would be deployed as with v2.0.0 release
+* Reduce the amount of filesystem available to 20KBs
+* Add new animation button for WebUSB state change between disconnected and connected (#281)
+* Add link to in language menu to add translations (#266) (#285)
+* Fixes several WebUSB issues (#268) (#267) (#269) (#278) (#284) (#285)
+* Fixes issues with button icons rendering differently depending on browser (#271) (#272) (#275) (#282)
+* Accessibility fixes (#277)
+* Update microbit-fs to v0.8.0
+
+2.0.0-beta.5
+------------
+* Added new icons for the Download, Flash, Connect and Disconnect buttons (#262) (#264) 
+* Added a warning if the user tries to load incompatible files (#245)
+* Enable WebUSB logging into the console for better error reports (#250)
+* WebUSB now keeps device details between connections (#255)
+* Added troubleshooting links to WebUSB docs and WebUSB error modal. (#251)
+* Added translation documentation, including translation strategy (#234) (#255) (#260)
+* Added initial steps to integrate with Crowdin translations (#247) (#257)
+* Set language links wording to their native language (#249)
+* Updated the manual test procedure to sync with the latest editor updates (#258)
+* Fix USB drag and drop flashing while WebUSB is connected (#255)
+* Improve the style of separators in the WebUSB error modal (#259)
+
+2.0.0-beta.4
+------------
+* Term "Partial Flashing" renamed to "Quick Flashing" (#233)
+* Add support for an iframe messaging protocol (#246)
+* Edit Snippets modal wording and translate table header (#236)
+* Disable autocomplete on enter by default (#235) (current default is tab key)
+* Update files and modules user docs (#243)
+* Highlight the current language in the language menu (#242)
+* Add more info about the filesystem in the Load/Save modal (#241)
+* WebUSB flashing fixes (#239) (#237) (#248)
+* Top buttons are now scrollable on small (mobile) resolutions (#232)
+* Fix rendering of the WebUSB modal in IE10 (#238)
+
+2.0.0-beta.3
+------------
+* Added WebUSB 'Quick Flash' using partial flashing (#217) (#222) (#224) (#225) (#227) (#228) (#229)
+* Improved WebUSB error handling (#211)
+* WebUSB buttons are always displayed (#226)
+* Help page updated with the new features (#199)
+* Added Polish translation and updated Spanish translation (#206) (#210) (#230)
+* Language can now be set via URL (#212)
+* Accessibility improvements (#215) (#219)
+* General UI improvements (#213)
+
+2.0.0-beta.2
+------------
+* Updated the Load/Save modal UI (#203) (#204)
+* Added language selection functionality (#151) (#198) (#205)
+* Added feedback link to the Help menu (#200)
+* Moved snippets and Language to be small buttons. (#202)
+* Moved Options and Autocomplete to always be part of the experimental flag (#201) (#192)
+* Added a global way to process URL parameters (#184)
+* Release checklist updated (#195)
+* Automated and manual tests updated (#196) (#194)
+* Fix: Set the correct Script Name when a Python file is loaded (#193)
+* Fix: Save main.py with the Script Name as the file name (#191)
+
+2.0.0-beta.1
+------------
+* Added WebUSB functionality (#99)
+* Added MicroPython file system functionality (#88)
+* Added autocompletion to the code editor (#185)
+
+1.1.5
+-----
+* Add floating help panel (#115)
+* Add puppeteer tests (#166) 
+* Add custom event for dropping a file to the load modal (#168)
+* Refactor some of the blocks code (#165)
+
+1.1.4
+-----
+* Run jasmine tests in Azure Pipelines with node and jest (#134)
+* Fix #139 to able to load the blocks in the current version of the Editor (#140)
+* Remove unused "check version" functionality (#144)
+* Fix link in help.html (#138)
+* Add classnames and docs for new editor metrics (#150)
+* Lazy load blocks and only when enabled (#101)
+* Use input instead of div for script name (#95)
+* Remove unused description field, CSS, and JS (#98)
+
+1.1.3
+-----
+* Fixes issue loading hex files into the Editor (https://github.com/bbcmicrobit/PythonEditor/pull/89)
+* Delegates Intel Hex manipulation to a library (https://github.com/NordicSemiconductor/nrf-intel-hex)
+* Help file can read URL parameters to indicate what features to show
+* When an invalid hex file is loaded it will now display an error message (before it didn't do anything)
+
+1.1.2
+-----
+
+* Updated MicroPython to 1.0.1 release
+* Updated README with migration documentation
+
+1.1.1
+-----
+
+* Added migration capability
+
+1.1.0
+-----
+
+* Updated MicroPython to 1.0.0 release
+* Added help overlay with version information
+
+1.0.0
+-----
+
+* Updated styling
+* Moved show script to bin/show
+* Flags disabled by default: blocks, experimental, and share
+
+0.1.0
+-----
+
+* Add "Experimental" background image.
+* Update help pages to reflect the latest changes.
+* Add awareness of versioning and related manifest when available.
+* Add file load button with drag and drop capabilities.
+
+0.0.10
+------
+
+* Fix outstanding block related gremlins (with tests).
+
+0.0.9
+-----
+
+* Add zoom to blocks (thanks Carlos).
+* Fix next-block on panic and reset blocks (thanks again Carlos).
+* Fix GIT submodule misconfiguration (thanks again [again] Carlos).
+* Disable code snippets when blockly is active.
+* Update documentation as per the above changes.
+
+0.0.8
+-----
+
+* Add blockly support (requires GIT sub-modules).
+* Add config object containing translation strings.
+* Add feature flags to the config object.
+* Check for size of Python script before flashing (added tests for this too).
+* Move editor instantiation to within the HTML.
+* Updated help to include latest UI changes.
+* Updated README in light of changes above.
+
+0.0.7
+-----
+
+* If there's unsaved work, ask user for confirmation if moving away from editor.
+* Add save button to download raw Python script.
+* Add drag to load for Python scripts and hex files.
+
+0.0.6
+-----
+
+* Remove TouchDevelop specific elements.
+* Make a stand-alone version of the editor.
+* Simplification of the UI.
+* Add a "share" button to create a tiny URL to point at the current script.
+* Use query strings to override the script name, comment and code.
+* Update to the latest version of MicroPython:
+    - Various minor refactors.
+    - Audio
+    - Speech
+    - Radio
+    - input() builtin
+* Documentation work / tidy up.
+
+0.0.5
+-----
+
+* Update to the latest version of MicroPython:
+    - Various minor code refactors.
+    - More efficient ticker (reduces overhead of display update by 90%).
+    - Add builtin set and frozenset types (from core Python).
+    - Don't show SystemExit or KeyboardInterrupt exceptions on the display.
+* Update bug in editor that caused the status icon not to update to cloud.
+* Added test script here: https://stage.microbit.co.uk/hoqumw
+* Revised button-press code to be simpler.
+* Minor documentation updates.
+
+0.0.4
+-----
+
+Initial tested public release.
+
+0.1-0.3
+-------
+
+Private test versions.

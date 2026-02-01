@@ -1,0 +1,114 @@
+<xml xmlns="http://www.w3.org/1999/xhtml">
+<block type="test_handler_arguments4">
+<value name="HANDLER_DRAG_PARAM_c">
+<block type="argument_reporter_string">
+<mutation duplicateondrag="true" />
+<field name="VALUE">hello</field>
+</block>
+</value>
+<value name="HANDLER_DRAG_PARAM_d">
+<block type="argument_reporter_number">
+<mutation duplicateondrag="true" />
+<field name="VALUE">goodbye</field>
+</block>
+</value>
+<value name="HANDLER_DRAG_PARAM_e">
+<block type="argument_reporter_boolean">
+<mutation duplicateondrag="true" />
+<field name="VALUE">e</field>
+</block>
+</value>
+<value name="HANDLER_DRAG_PARAM_f">
+<block type="argument_reporter_custom">
+<mutation typename="testNamespace.TestClass" duplicateondrag="true" />
+<field name="VALUE">f</field>
+</block>
+</value>
+<statement name="HANDLER">
+</statement>
+</block>
+<block type="test_handler_arguments4">
+<value name="HANDLER_DRAG_PARAM_c">
+<block type="argument_reporter_string">
+<mutation duplicateondrag="true" />
+<field name="VALUE">what</field>
+</block>
+</value>
+<value name="HANDLER_DRAG_PARAM_d">
+<block type="argument_reporter_number">
+<mutation duplicateondrag="true" />
+<field name="VALUE">are</field>
+</block>
+</value>
+<value name="HANDLER_DRAG_PARAM_e">
+<block type="argument_reporter_boolean">
+<mutation duplicateondrag="true" />
+<field name="VALUE">you</field>
+</block>
+</value>
+<value name="HANDLER_DRAG_PARAM_f">
+<block type="argument_reporter_custom">
+<mutation typename="testNamespace.TestClass" duplicateondrag="true" />
+<field name="VALUE">doing</field>
+</block>
+</value>
+<statement name="HANDLER">
+</statement>
+</block>
+<block type="test_handler_arguments4">
+<value name="HANDLER_DRAG_PARAM_c">
+<block type="argument_reporter_string">
+<mutation duplicateondrag="true" />
+<field name="VALUE">stahp</field>
+</block>
+</value>
+<value name="HANDLER_DRAG_PARAM_d">
+<block type="argument_reporter_number">
+<mutation duplicateondrag="true" />
+<field name="VALUE">d</field>
+</block>
+</value>
+<value name="HANDLER_DRAG_PARAM_e">
+<block type="argument_reporter_boolean">
+<mutation duplicateondrag="true" />
+<field name="VALUE">e</field>
+</block>
+</value>
+<value name="HANDLER_DRAG_PARAM_f">
+<block type="argument_reporter_custom">
+<mutation typename="testNamespace.TestClass" duplicateondrag="true" />
+<field name="VALUE">f</field>
+</block>
+</value>
+<statement name="HANDLER">
+</statement>
+</block>
+<block type="test_handler_arguments4">
+<value name="HANDLER_DRAG_PARAM_c">
+<block type="argument_reporter_string">
+<mutation duplicateondrag="true" />
+<field name="VALUE">c</field>
+</block>
+</value>
+<value name="HANDLER_DRAG_PARAM_d">
+<block type="argument_reporter_number">
+<mutation duplicateondrag="true" />
+<field name="VALUE">d</field>
+</block>
+</value>
+<value name="HANDLER_DRAG_PARAM_e">
+<block type="argument_reporter_boolean">
+<mutation duplicateondrag="true" />
+<field name="VALUE">e</field>
+</block>
+</value>
+<value name="HANDLER_DRAG_PARAM_f">
+<block type="argument_reporter_custom">
+<mutation typename="testNamespace.TestClass" duplicateondrag="true" />
+<field name="VALUE">f</field>
+</block>
+</value>
+<statement name="HANDLER">
+</statement>
+</block>
+</xml>

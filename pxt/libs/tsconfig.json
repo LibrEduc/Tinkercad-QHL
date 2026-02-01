@@ -1,0 +1,13 @@
+{
+    "compilerOptions": {
+        "target": "ES5",
+        "noImplicitAny": true,
+        "noImplicitReturns": true,
+        "outDir": "../built",
+        "rootDir": ".",
+        "newLine": "LF",
+        "sourceMap": false,
+        "incremental": true,
+        "skipLibCheck": true
+    }
+}

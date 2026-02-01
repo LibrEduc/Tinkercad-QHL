@@ -1,0 +1,70 @@
+[2026-02-01T12:17:32.086Z] Starting monitor for drive: G:/
+[2026-02-01T12:17:32.090Z] Watching for PROGRAM.HEX, PROGRAM.TMP, FAIL.TXT, DETAILS.TXT
+[2026-02-01T12:17:32.090Z] Initial snapshot:
+[2026-02-01T12:17:32.091Z] DETAILS.TXT appeared (size=495)
+[2026-02-01T12:17:33.105Z] Details file found; assuming flash completed
+[2026-02-01T12:17:33.110Z] Details content:
+# DAPLink Firmware - see https://mbed.com/daplink
+Unique ID: 9901000051774e45000d7011000000220000000097969901
+HIC ID: 97969901
+Auto Reset: 1
+Automation allowed: 0
+Overflow detection: 0
+Daplink Mode: Interface
+Interface Version: 0253
+Bootloader Version: 0243
+Git SHA: 64359f5c786363065a41ec15c348e3d53568da03
+Local Mods: 0
+USB Interfaces: MSD, CDC, HID, WebUSB
+Bootloader CRC: 0x32eb3cfd
+Interface CRC: 0x53375800
+Remount count: 0
+URL: https://microbit.org/device/?id=9901&v=0253
+
+[2026-02-01T12:17:33.111Z] Monitor completed
+[2026-02-01T12:33:44.227Z] Starting monitor for drive: G:/
+[2026-02-01T12:33:44.230Z] Watching for PROGRAM.HEX, PROGRAM.TMP, FAIL.TXT, DETAILS.TXT
+[2026-02-01T12:33:44.230Z] Initial snapshot:
+[2026-02-01T12:33:45.243Z] Details file found; assuming flash completed
+[2026-02-01T12:33:45.248Z] Details content:
+# DAPLink Firmware - see https://mbed.com/daplink
+Unique ID: 9901000051774e45000d7011000000220000000097969901
+HIC ID: 97969901
+Auto Reset: 1
+Automation allowed: 0
+Overflow detection: 0
+Daplink Mode: Interface
+Interface Version: 0253
+Bootloader Version: 0243
+Git SHA: 64359f5c786363065a41ec15c348e3d53568da03
+Local Mods: 0
+USB Interfaces: MSD, CDC, HID, WebUSB
+Bootloader CRC: 0x32eb3cfd
+Interface CRC: 0x53375800
+Remount count: 1
+URL: https://microbit.org/device/?id=9901&v=0253
+
+[2026-02-01T12:33:45.248Z] Monitor completed
+[2026-02-01T12:35:08.285Z] Starting monitor for drive: G:/
+[2026-02-01T12:35:08.289Z] Watching for PROGRAM.HEX, PROGRAM.TMP, FAIL.TXT, DETAILS.TXT
+[2026-02-01T12:35:08.289Z] Initial snapshot:
+[2026-02-01T12:35:09.302Z] Details file found; assuming flash completed
+[2026-02-01T12:35:09.303Z] Details content:
+# DAPLink Firmware - see https://mbed.com/daplink
+Unique ID: 9901000051774e45000d7011000000220000000097969901
+HIC ID: 97969901
+Auto Reset: 1
+Automation allowed: 0
+Overflow detection: 0
+Daplink Mode: Interface
+Interface Version: 0253
+Bootloader Version: 0243
+Git SHA: 64359f5c786363065a41ec15c348e3d53568da03
+Local Mods: 0
+USB Interfaces: MSD, CDC, HID, WebUSB
+Bootloader CRC: 0x32eb3cfd
+Interface CRC: 0x53375800
+Remount count: 1
+URL: https://microbit.org/device/?id=9901&v=0253
+
+[2026-02-01T12:35:09.304Z] Monitor completed

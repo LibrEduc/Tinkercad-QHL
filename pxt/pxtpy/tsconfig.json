@@ -1,0 +1,25 @@
+{
+    "compilerOptions": {
+        "target": "es2017",
+        "noImplicitAny": true,
+        "noImplicitReturns": true,
+        "noImplicitThis": true,
+        "strictNullChecks": true,
+        "declaration": true,
+        "outFile": "../built/pxtpy.js",
+        "newLine": "LF",
+        "sourceMap": false,
+        "lib": [
+            "dom",
+            "dom.iterable",
+            "scripthost",
+            "es2017",
+            "ES2018.Promise"
+        ],
+        "types": [
+            "fuse"
+        ],
+        "incremental": true,
+        "skipLibCheck": true
+    }
+}

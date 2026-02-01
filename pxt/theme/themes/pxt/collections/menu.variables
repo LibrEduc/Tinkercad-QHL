@@ -1,0 +1,10 @@
+/*******************************
+    User Variable Overrides
+*******************************/
+
+@invertedHoverBackground: var(--pxt-neutral-alpha10);
+@invertedActiveBackground: var(--pxt-neutral-alpha10);
+
+/* PXT Variables */
+
+@mainMenuMinHeight: @mainMenuHeight;
