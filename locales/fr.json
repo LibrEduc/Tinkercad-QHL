@@ -123,7 +123,18 @@
     "help": {
       "label": "Aide",
       "learnMore": "En savoir plus",
-      "about": "À propos"
+      "about": "À propos",
+      "makeDonation": "Faire un don",
+      "requestInvoice": "Enseignants, demandez une facture"
+    },
+    "startup": {
+      "warningTitle": "Binaires manquants",
+      "warningMessage": "Certains binaires requis sont introuvables",
+      "missingArduinoCli": "Arduino CLI est introuvable.\n\n",
+      "missingArduinoCliDetail": "Le compilateur Arduino sera téléchargé automatiquement lors de la première utilisation.\n\n",
+      "missingMicrobitRuntimes": "Les runtimes MicroPython sont introuvables :\n",
+      "missingMicrobitDetail": "Utilisez le menu \"micro:bit > Installer MicroPython\" pour les télécharger.",
+      "okButton": "OK"
     }
   }
 }

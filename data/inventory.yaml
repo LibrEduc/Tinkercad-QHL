@@ -1,0 +1,12 @@
+cache:
+    api2:
+        arduino:
+            cc/boards/v1/boards?vid-pid=0x0d28-0x0204:
+                data: '[]'
+                ts: 2026-02-02T01:59:05.2780215+01:00
+            cc/boards/v1/boards?vid-pid=0x2341-0x0043:
+                data: '[{"name":"Arduino Uno","fqbn":"arduino:avr:uno"}]'
+                ts: 2026-02-02T01:59:05.4292873+01:00
+installation:
+    id: fa4a8bc5-9f79-4619-9a46-18c5ee6ac669
+    secret: c177e046-b98a-45ae-a1da-b23527900362

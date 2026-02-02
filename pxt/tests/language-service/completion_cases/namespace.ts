@@ -1,1 +1,0 @@
-testNamespace. // testNamespace.someFunction

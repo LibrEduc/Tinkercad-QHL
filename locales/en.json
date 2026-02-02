@@ -123,7 +123,18 @@
     "help": {
       "label": "Help",
       "learnMore": "Learn More",
-      "about": "About"
+      "about": "About",
+      "makeDonation": "Make a donation",
+      "requestInvoice": "Teachers, request an invoice"
+    },
+    "startup": {
+      "warningTitle": "Missing binaries",
+      "warningMessage": "Some required binaries are missing",
+      "missingArduinoCli": "Arduino CLI is missing.\n\n",
+      "missingArduinoCliDetail": "The Arduino compiler will be automatically downloaded on first use.\n\n",
+      "missingMicrobitRuntimes": "MicroPython runtimes are missing:\n",
+      "missingMicrobitDetail": "Use the \"micro:bit > Install MicroPython\" menu to download them.",
+      "okButton": "OK"
     }
   }
 }

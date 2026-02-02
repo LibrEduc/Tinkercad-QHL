@@ -1,12 +1,15 @@
 {
-  "name": "Tinkercad QHL",
+  "name": "tinkercad-qhl",
   "version": "1.2.0",
   "main": "index.js",
-  "date": "2026-02-01",
+  "date": "2025-02-01",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron .",
-    "build": "electron-builder --win zip",
+    "build": "electron-builder",
+    "build:win": "electron-builder --win zip",
+    "build:linux": "electron-builder --linux",
+    "build:mac": "electron-builder --mac",
     "monitor-microbit": "node scripts/monitor_microbit_drive.js"
   },
   "keywords": [],
@@ -19,20 +22,36 @@
     "electron-builder": "^26.7.0",
     "sharp": "^0.34.5"
   },
-  "build": {
-    "appId": "com.tinkercad.desktop",
-    "productName": "Tinkercad QHL",
-    "directories": {
-      "output": "dist"
-    },
-    "win": {
-      "target": [
-        "portable",
-        "zip"
-      ],
-      "defaultArch": "x64",
-      "icon": "build/autodesk-tinkercad.png"
-    },
+    "build": {
+      "appId": "com.tinkercad.desktop",
+      "productName": "Tinkercad QHL",
+      "directories": {
+        "output": "dist"
+      },
+      "win": {
+        "target": [
+          "portable",
+          "zip"
+        ],
+        "defaultArch": "x64",
+        "icon": "build/autodesk-tinkercad.png"
+      },
+      "linux": {
+        "target": [
+          "AppImage",
+          "zip"
+        ],
+        "category": "Education",
+        "icon": "build/autodesk-tinkercad.png"
+      },
+      "mac": {
+        "target": [
+          "dmg",
+          "zip"
+        ],
+        "category": "public.app-category.education",
+        "icon": "build/autodesk-tinkercad.png"
+      },
     "extraResources": [
       {
         "from": "arduino",
@@ -59,7 +78,6 @@
   },
   "dependencies": {
     "electron-prompt": "^1.7.0",
-    "winreg": "^1.2.5",
     "@microbit/microbit-fs": "^0.10.0"
   }
 }

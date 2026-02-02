@@ -1,1 +1,0 @@
-tiles.setTilemap(tiles.createTilemap(null, 0, 8 ** 8, 9));

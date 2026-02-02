@@ -1,1 +1,0 @@
-template.fixedInstanceArg(fix`1234`);

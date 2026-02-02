@@ -1,5 +1,0 @@
-
-/**
- * More
- */
-testNamespace.booleanArgument(true)
