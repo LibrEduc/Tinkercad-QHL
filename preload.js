@@ -14,5 +14,24 @@ contextBridge.exposeInMainWorld('api', {
     onLanguageChange: (callback) => {
         ipcRenderer.on('language-changed', callback);
         return () => ipcRenderer.removeListener('language-changed', callback);
+    },
+    onBoardStatusUpdate: (callback) => {
+        ipcRenderer.on('update-board-status', callback);
+        return () => ipcRenderer.removeListener('update-board-status', callback);
+    },
+    getIconPaths: async () => {
+        // Demander les chemins des icônes au processus principal via IPC
+        try {
+            return await ipcRenderer.invoke('get-icon-paths');
+        } catch (error) {
+            console.error('Error getting icon paths:', error);
+            return { arduino: null, microbit: null };
+        }
+    },
+    uploadArduino: () => {
+        ipcRenderer.send('upload-arduino');
+    },
+    uploadMicrobit: () => {
+        ipcRenderer.send('upload-microbit');
     }
 });

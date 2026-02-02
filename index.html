@@ -14,9 +14,114 @@
       height: 100%;
       border: none;
     }
+    .icon-container {
+      position: fixed;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      padding: 5px 15px;
+      background-color: rgba(245, 245, 245, 0.9);
+      border-radius: 0 0 8px 8px;
+      z-index: 10000;
+      pointer-events: none;
+    }
+    .icon-container img {
+      width: 40px;
+      height: 40px;
+      object-fit: contain;
+      transition: opacity 0.3s ease, filter 0.3s ease, transform 0.2s ease;
+      pointer-events: auto;
+      cursor: pointer;
+    }
+    .icon-container img:hover:not(.disabled) {
+      transform: scale(1.1);
+    }
+    .icon-container img.disabled {
+      opacity: 0.3;
+      filter: grayscale(100%);
+      cursor: not-allowed;
+    }
   </style>
 </head>
 <body>
+  <div class="icon-container">
+    <img id="arduino-img" alt="Arduino" class="disabled">
+    <img id="microbit-img" alt="micro:bit" class="disabled">
+  </div>
   <webview src="https://www.tinkercad.com" allowpopups></webview>
+  <script>
+    // Charger les icônes depuis le répertoire build
+    const arduinoImg = document.getElementById('arduino-img');
+    const microbitImg = document.getElementById('microbit-img');
+    
+    // Utiliser l'API exposée par le preload pour obtenir les chemins des icônes
+    if (window.api && window.api.getIconPaths) {
+      window.api.getIconPaths().then(iconPaths => {
+        console.log('Icon paths:', iconPaths);
+        if (arduinoImg && iconPaths.arduino) {
+          // Utiliser file:// pour charger les fichiers locaux
+          // Ajouter un slash au début si nécessaire
+          const arduinoSrc = iconPaths.arduino.startsWith('/') 
+            ? `file://${iconPaths.arduino}` 
+            : `file:///${iconPaths.arduino}`;
+          arduinoImg.src = arduinoSrc;
+          console.log('Arduino icon src:', arduinoSrc);
+        }
+        if (microbitImg && iconPaths.microbit) {
+          const microbitSrc = iconPaths.microbit.startsWith('/') 
+            ? `file://${iconPaths.microbit}` 
+            : `file:///${iconPaths.microbit}`;
+          microbitImg.src = microbitSrc;
+          console.log('Micro:bit icon src:', microbitSrc);
+        }
+      }).catch(error => {
+        console.error('Error loading icon paths:', error);
+      });
+    } else {
+      console.warn('window.api.getIconPaths not available');
+    }
+    
+    // Écouter les mises à jour de l'état des cartes
+    if (window.api && window.api.onBoardStatusUpdate) {
+      window.api.onBoardStatusUpdate((event, data) => {
+        if (arduinoImg) {
+          if (data.arduino && data.arduino.length > 0) {
+            arduinoImg.classList.remove('disabled');
+          } else {
+            arduinoImg.classList.add('disabled');
+          }
+        }
+        
+        if (microbitImg) {
+          if (data.microbit && data.microbit.length > 0) {
+            microbitImg.classList.remove('disabled');
+          } else {
+            microbitImg.classList.add('disabled');
+          }
+        }
+      });
+    }
+    
+    // Ajouter les gestionnaires de clic pour déclencher le téléversement
+    if (arduinoImg && window.api && window.api.uploadArduino) {
+      arduinoImg.addEventListener('click', () => {
+        if (!arduinoImg.classList.contains('disabled')) {
+          window.api.uploadArduino();
+        }
+      });
+    }
+    
+    if (microbitImg && window.api && window.api.uploadMicrobit) {
+      microbitImg.addEventListener('click', () => {
+        if (!microbitImg.classList.contains('disabled')) {
+          window.api.uploadMicrobit();
+        }
+      });
+    }
+  </script>
 </body>
 </html>

@@ -138,6 +138,98 @@ ipcMain.handle('get-translation', (event, key) => {
     return value || key;
 });
 
+// Handle icon paths requests
+ipcMain.handle('get-icon-paths', (event) => {
+    const buildDir = path.join(directory, 'build');
+    
+    // Normaliser les chemins pour file:// (remplacer les backslashes par des slashes)
+    const normalizePath = (p) => {
+        const resolved = path.resolve(p);
+        return resolved.replace(/\\/g, '/');
+    };
+    
+    return {
+        arduino: normalizePath(path.join(buildDir, 'arduino-logo.svg')),
+        microbit: normalizePath(path.join(buildDir, 'Microbit_Hex.png'))
+    };
+});
+
+// Handle upload requests from toolbar icons
+ipcMain.on('upload-arduino', (event) => {
+    const mainWindow = BrowserWindow.fromWebContents(event.sender);
+    if (mainWindow) {
+        // Simuler le clic sur le menu "Téléverser le programme" Arduino
+        const t = translations.menu;
+        if (!selectedPort) {
+            showNotification(mainWindow, t.uploadCode.notifications.noPort);
+            return;
+        }
+        const portExists = previousBoards.some(board => board.port === selectedPort);
+        if (!portExists) {
+            showNotification(mainWindow, t.uploadCode.notifications.falsePort);
+            return;
+        }
+        extractCodeFromEditor(mainWindow).then(code => {
+            if (code === CONSTANTS.EMPTY_CODE) {
+                showNotification(mainWindow, t.copyCode.notifications.empty);
+                return;
+            }
+            compileAndUploadArduino(code, selectedPort, mainWindow).catch(error => {
+                logger.error('Error in Arduino upload process:', error);
+            });
+        }).catch(error => {
+            logger.error('Error extracting code:', error);
+            showNotification(mainWindow, t.copyCode.notifications.error);
+        });
+    }
+});
+
+ipcMain.on('upload-microbit', (event) => {
+    const mainWindow = BrowserWindow.fromWebContents(event.sender);
+    if (mainWindow) {
+        // Simuler le clic sur le menu "Téléverser le programme" micro:bit
+        const t = translations.menu;
+        if (!selectedMicrobitDrive) {
+            showNotification(mainWindow, t.microbit.notifications.noDrive || 'Aucune micro:bit sélectionnée');
+            return;
+        }
+        extractCodeFromEditor(mainWindow, { useAdvancedSelectors: true }).then(code => {
+            if (code === CONSTANTS.EMPTY_CODE) {
+                showNotification(mainWindow, t.copyCode.notifications.empty);
+                return;
+            }
+            // Utiliser la même logique que le menu micro:bit
+            let microPythonCode = code;
+            if (code.includes('basic.') || code.includes('IconNames.') || code.includes('basic.forever')) {
+                microPythonCode = convertMakeCodeToMicroPython(code);
+            } else if (!microPythonCode.includes('from microbit import')) {
+                microPythonCode = 'from microbit import *\n\n' + microPythonCode;
+            }
+            
+            compilePythonToHex(microPythonCode).then(hexContent => {
+                const firmwareName = CONSTANTS.PROGRAM_HEX_FILENAME;
+                const finalPath = path.join(selectedMicrobitDrive, firmwareName);
+                fs.writeFile(finalPath, hexContent, 'utf8', (err) => {
+                    if (err) {
+                        logger.error('Error writing HEX file to micro:bit:', err && err.stack ? err.stack : err);
+                        showNotification(mainWindow, t.microbit.notifications.uploadError || 'Erreur lors de l\'écriture du fichier HEX');
+                        return;
+                    }
+                    logger.info('HEX file written successfully to', finalPath);
+                    showNotification(mainWindow, t.microbit.notifications.uploadSuccess || 'Fichier HEX copié sur la carte micro:bit.');
+                });
+            }).catch(err => {
+                logger.error('Error compiling Python to HEX:', err && err.stack ? err.stack : err);
+                const errorMsg = (err && err.message) ? err.message : (err && err.toString) ? err.toString() : 'Erreur inconnue';
+                showNotification(mainWindow, (t.microbit.notifications.uploadError || 'Erreur de compilation') + '\n' + errorMsg);
+            });
+        }).catch(error => {
+            logger.error('Error extracting code from editor:', error);
+            showNotification(mainWindow, t.copyCode.notifications.error);
+        });
+    }
+});
+
 ipcMain.on('install-library', (event, libraryName) => {
     const win = BrowserWindow.fromWebContents(event.sender);
     const mainWindow = getMainWindowExcluding(win);
@@ -242,7 +334,8 @@ function createWindow() {
             nodeIntegration: false,
             contextIsolation: true,
             sandbox: true,
-            preload: PATHS.preload
+            preload: PATHS.preload,
+            webviewTag: true  // Nécessaire pour utiliser les balises <webview>
         }
     });
 
@@ -253,8 +346,8 @@ function createWindow() {
         });
     });
 
-    // Load Tinkercad website directly
-    mainWindow.loadURL('https://www.tinkercad.com/dashboard/designs/circuits');
+    // Load index.html with toolbar
+    mainWindow.loadFile('index.html');
 
     // S'assurer que le titre reste "Tinkercad QHL" même après le chargement de la page
     mainWindow.on('page-title-updated', (event) => {
@@ -1709,6 +1802,7 @@ function updateMicrobitDrivesList(drives, browserWindow) {
 
     // Toujours rafraîchir le menu pour s'assurer qu'il est à jour
     refreshMenu();
+    updateBoardStatusIcons();
 
     if (hasChanges && browserWindow) {
         if (drives.length === 0) {
@@ -1742,11 +1836,11 @@ async function downloadToFile(url, destPath) {
                 return;
             }
 
-            const file = fs.createWriteStream(destPath);
-            file.on('error', err => {
+        const file = fs.createWriteStream(destPath);
+        file.on('error', err => {
                 safeExecute(() => fs.unlinkSync(destPath));
-                reject(err);
-            });
+            reject(err);
+        });
 
             https.get(currentUrl, res => {
                 // Suivre les redirections (301, 302, 307, 308)
@@ -1765,20 +1859,20 @@ async function downloadToFile(url, destPath) {
                     return;
                 }
 
-                if (res.statusCode !== 200) {
+            if (res.statusCode !== 200) {
                     safeExecute(() => file.close());
                     safeExecute(() => fs.unlinkSync(destPath));
-                    reject(new Error('HTTP ' + res.statusCode));
-                    return;
-                }
+                reject(new Error('HTTP ' + res.statusCode));
+                return;
+            }
 
-                res.pipe(file);
-                file.on('finish', () => file.close(() => resolve()));
-            }).on('error', err => {
+            res.pipe(file);
+            file.on('finish', () => file.close(() => resolve()));
+        }).on('error', err => {
                 safeExecute(() => file.close());
                 safeExecute(() => fs.unlinkSync(destPath));
-                reject(err);
-            });
+            reject(err);
+        });
         };
 
         download(url);
@@ -2112,7 +2206,7 @@ async function ensureArduinoCli(browserWindow, autoDownload = true) {
                     }
                     return false;
                 }
-                } else {
+        } else {
                     // Téléchargement direct du binaire
                     await downloadToFile(downloadUrl, arduinoCliPath);
                     makeExecutable(arduinoCliPath);
@@ -2266,7 +2360,7 @@ async function installMicroPythonRuntimes(browserWindow) {
                 } else {
                     logger.warn('Could not get micro:bit v1 HEX URL from GitHub API');
                 }
-            } catch (e) {
+    } catch (e) {
                 logger.error(`Failed to download MICROBIT_V1.hex:`, e.message || e);
                 // Si c'est une erreur de permissions, afficher un message plus clair
                 if (e.code === 'EACCES' || e.message?.includes('permission') || e.message?.includes('droits')) {
@@ -2296,7 +2390,7 @@ async function installMicroPythonRuntimes(browserWindow) {
                 logger.error(`Failed to download MICROBIT.hex:`, e.message || e);
                 // Si c'est une erreur de permissions, afficher un message plus clair
                 if (e.code === 'EACCES' || e.message?.includes('permission') || e.message?.includes('droits')) {
-                    if (browserWindow) {
+            if (browserWindow) {
                         showNotification(browserWindow, `Erreur de permissions : impossible d'écrire dans ${v2Cache}\n\nVérifiez les droits d'écriture sur le répertoire.`);
                     }
                 }
@@ -2357,14 +2451,15 @@ async function listArduinoBoards(browserWindow) {
 
         previousBoards = boards;
         refreshMenu();
+        updateBoardStatusIcons();
 
         if (hasChanges) {
             if (boards.length === 0) {
                 // Réinitialiser la sélection si aucune carte n'est disponible
                 selectedPort = null;
                 if (browserWindow) {
-                    showNotification(browserWindow, t.listPorts.notifications.noPorts);
-                }
+                showNotification(browserWindow, t.listPorts.notifications.noPorts);
+            }
             } else {
                 // Auto-sélectionner la première carte si aucune n'est sélectionnée
                 if (!selectedPort || !boards.some(b => b.port === selectedPort)) {
@@ -2401,6 +2496,9 @@ app.whenReady().then(() => {
     // Vérifier les binaires requis au démarrage
     const mainWindow = getMainWindow();
     checkRequiredBinaries(mainWindow);
+
+    // Initialiser l'état des icônes au démarrage
+    updateBoardStatusIcons();
 
     // Start background board detection service
     // Ne pas télécharger automatiquement au démarrage, juste vérifier si disponible
@@ -2487,6 +2585,8 @@ function showNotification(browserWindow, message) {
                     notification.style.transition = 'opacity 0.3s ease-in-out';
                     notification.style.textAlign = 'center';
                     notification.style.whiteSpace = 'pre-wrap';
+                    notification.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+                    notification.style.fontSize = '14px';
                     notification.textContent = "${escapedMessage}";
                     notification.style.cursor = 'pointer';
                     notification.addEventListener('click', () => {
@@ -2880,6 +2980,19 @@ function createHelpMenu(t) {
             }
         ]
     };
+}
+
+/**
+ * Met à jour l'état des icônes dans la barre d'outils selon la disponibilité des cartes
+ */
+function updateBoardStatusIcons() {
+    const mainWindow = getMainWindow();
+    if (mainWindow && mainWindow.webContents) {
+        mainWindow.webContents.send('update-board-status', {
+            arduino: previousBoards,
+            microbit: previousMicrobitDrives
+        });
+    }
 }
 
 /**
