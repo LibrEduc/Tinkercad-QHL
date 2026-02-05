@@ -124,6 +124,11 @@
       "label": "Help",
       "learnMore": "Learn More",
       "about": "About",
+      "checkUpdate": "Check for updates",
+      "checkUpdateChecking": "Checking for updates...",
+      "checkUpdateCurrent": "You are using the latest version ({version}).",
+      "checkUpdateAvailable": "An update is available: {version}",
+      "checkUpdateError": "Unable to check for updates.",
       "makeDonation": "Make a donation",
       "requestInvoice": "Teachers, request an invoice"
     },

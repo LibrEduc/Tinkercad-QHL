@@ -1,6 +1,6 @@
 {
   "name": "tinkercad-qhl",
-  "version": "1.2.0",
+  "version": "1.2.5",
   "main": "index.js",
   "date": "2025-02-01",
   "scripts": {
@@ -10,13 +10,15 @@
     "build:win": "electron-builder --win zip",
     "build:linux": "electron-builder --linux",
     "build:mac": "electron-builder --mac",
+    "build:all": "electron-builder --win zip --linux --mac",
     "monitor-microbit": "node scripts/monitor_microbit_drive.js"
   },
   "keywords": [],
   "author": "Sébastien Canet",
   "license": "CC0-1.0",
   "type": "commonjs",
-  "description": "",
+  "description": "Application desktop Tinkercad QHL — compilation et téléversement Arduino et micro:bit",
+  "repository": "github:LibrEduc/TinkercadOffline",
   "devDependencies": {
     "electron": "^40.1.0",
     "electron-builder": "^26.7.0",
@@ -34,7 +36,7 @@
           "zip"
         ],
         "defaultArch": "x64",
-        "icon": "build/autodesk-tinkercad.png"
+        "icon": "assets/autodesk-tinkercad.png"
       },
       "linux": {
         "target": [
@@ -42,7 +44,7 @@
           "zip"
         ],
         "category": "Education",
-        "icon": "build/autodesk-tinkercad.png"
+        "icon": "assets/autodesk-tinkercad.png"
       },
       "mac": {
         "target": [
@@ -50,7 +52,7 @@
           "zip"
         ],
         "category": "public.app-category.education",
-        "icon": "build/autodesk-tinkercad.png"
+        "icon": "assets/autodesk-tinkercad.png"
       },
     "extraResources": [
       {
@@ -73,7 +75,29 @@
         "filter": [
           "**/*"
         ]
+      },
+      {
+        "from": "assets",
+        "to": "../assets",
+        "filter": [
+          "*.svg",
+          "*.png"
+        ]
       }
+    ],
+    "files": [
+      "**/*",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/*.d.ts",
+      "!**/node_modules/.bin",
+      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
+      "!.editorconfig",
+      "!**/._*",
+      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
+      "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
+      "!**/{appveyor.yml,.travis.yml,circle.yml}",
+      "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
     ]
   },
   "dependencies": {

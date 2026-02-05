@@ -124,6 +124,11 @@
       "label": "Aide",
       "learnMore": "En savoir plus",
       "about": "À propos",
+      "checkUpdate": "Vérifier les mises à jour",
+      "checkUpdateChecking": "Vérification des mises à jour...",
+      "checkUpdateCurrent": "Vous utilisez la dernière version ({version}).",
+      "checkUpdateAvailable": "Une mise à jour est disponible : {version}",
+      "checkUpdateError": "Impossible de vérifier les mises à jour.",
       "makeDonation": "Faire un don",
       "requestInvoice": "Enseignants, demandez une facture"
     },
