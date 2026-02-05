@@ -66,6 +66,22 @@ const getExtraResourcePath = (resourceName) => {
     }
 };
 
+/**
+ * Dossier de données portable (à côté de l'exécutable en prod, du projet en dev).
+ * Permet une utilisation 100 % portable : aucun écrit dans AppData / userData.
+ */
+function getPortableDataDir() {
+    const appDir = isDev() ? __dirname : path.dirname(process.execPath);
+    return path.join(appDir, 'data');
+}
+
+function ensurePortableDataDir() {
+    const dir = getPortableDataDir();
+    if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+    }
+}
+
 const PATHS = {
     arduinoCli: getArduinoCliExecutable(),
     arduinoConfig: (() => {
@@ -79,8 +95,7 @@ const PATHS = {
     microbit: {
         v1: path.join(getExtraResourcePath('microbit'), 'MICROBIT_V1.hex'),
         v2: path.join(getExtraResourcePath('microbit'), 'MICROBIT.hex'),
-        // Utiliser userData pour le cache (toujours accessible en écriture)
-        cache: path.join(app.getPath('userData'), 'microbit-cache')
+        cache: path.join(getPortableDataDir(), 'microbit-cache')
     }
 };
 
@@ -470,13 +485,14 @@ function createWindow() {
         mainWindow.webContents.openDevTools();
     }
     
-    // Afficher le chemin du fichier de log au démarrage
-    logger.info(`Fichier de log: ${logFile}`);
-    if (!isDev()) {
-        // En production, afficher une notification avec le chemin du log
-        mainWindow.webContents.once('did-finish-load', () => {
-            showNotification(mainWindow, `Fichier de log: ${logFile}`);
-        });
+    // Afficher le chemin du fichier de log au démarrage (uniquement si mode debug activé)
+    if (DEBUG_FILE_LOGGING) {
+        logger.info(`Fichier de log: ${logFile}`);
+        if (!isDev()) {
+            mainWindow.webContents.once('did-finish-load', () => {
+                showNotification(mainWindow, `Fichier de log: ${logFile}`);
+            });
+        }
     }
 
     // S'assurer que le titre reste "Tinkercad QHL" même après le chargement de la page
@@ -520,23 +536,32 @@ const MAKECODE_PATTERNS = [
 // HELPERS ET UTILITAIRES
 // ============================================================================
 
-// Système de logging avec niveaux et écriture dans un fichier
-const logFile = path.join(app.getPath('userData'), 'debug.log');
-const logStream = fs.createWriteStream(logFile, { flags: 'a' });
+// Mode debug fichier : activé par TINKERCAD_DEBUG=1 (npm run start:debug) ou par build:win:debug
+let DEBUG_FILE_LOGGING = false;
+try {
+    DEBUG_FILE_LOGGING = process.env.TINKERCAD_DEBUG === '1' || require('./debug-mode.js');
+} catch (e) {
+    DEBUG_FILE_LOGGING = false;
+}
+
+ensurePortableDataDir();
+const logFile = path.join(getPortableDataDir(), 'debug.log');
+const logStream = DEBUG_FILE_LOGGING ? fs.createWriteStream(logFile, { flags: 'a' }) : null;
 
 function writeLog(level, ...args) {
     const timestamp = new Date().toISOString();
-    const message = `[${timestamp}] [${level}] ${args.map(arg => 
+    const message = `[${timestamp}] [${level}] ${args.map(arg =>
         typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
     ).join(' ')}\n`;
-    
-    // Écrire dans le fichier
-    try {
-        logStream.write(message);
-    } catch (err) {
-        // Ignorer les erreurs d'écriture
+
+    if (logStream) {
+        try {
+            logStream.write(message);
+        } catch (err) {
+            // Ignorer les erreurs d'écriture
+        }
     }
-    
+
     // Aussi dans la console
     if (level === 'DEBUG') {
         console.log('[DEBUG]', ...args);
@@ -566,7 +591,9 @@ const logger = {
 
 // Logger le démarrage
 logger.info('Application started');
-logger.info(`Log file: ${logFile}`);
+if (DEBUG_FILE_LOGGING) {
+    logger.info(`Log file: ${logFile}`);
+}
 logger.info(`Platform: ${process.platform}`);
 logger.info(`Node version: ${process.version}`);
 logger.info(`Electron version: ${process.versions.electron}`);

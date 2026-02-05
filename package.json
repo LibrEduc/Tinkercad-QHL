@@ -6,8 +6,10 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "electron .",
+    "start:debug": "cross-env TINKERCAD_DEBUG=1 electron .",
     "build": "electron-builder",
     "build:win": "electron-builder --win zip",
+    "build:win:debug": "node scripts/set-debug-mode.js true && electron-builder --win zip && node scripts/set-debug-mode.js false",
     "build:linux": "electron-builder --linux",
     "build:mac": "electron-builder --mac",
     "build:all": "electron-builder --win zip --linux --mac",
@@ -20,40 +22,41 @@
   "description": "Application desktop Tinkercad QHL — compilation et téléversement Arduino et micro:bit",
   "repository": "github:LibrEduc/TinkercadOffline",
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "electron": "^40.1.0",
     "electron-builder": "^26.7.0",
     "sharp": "^0.34.5"
   },
-    "build": {
-      "appId": "com.tinkercad.desktop",
-      "productName": "Tinkercad QHL",
-      "directories": {
-        "output": "dist"
-      },
-      "win": {
-        "target": [
-          "portable",
-          "zip"
-        ],
-        "defaultArch": "x64",
-        "icon": "assets/autodesk-tinkercad.png"
-      },
-      "linux": {
-        "target": [
-          "AppImage",
-          "zip"
-        ],
-        "category": "Education",
-        "icon": "assets/autodesk-tinkercad.png"
-      },
-      "mac": {
-        "target": [
-          "dmg",
-          "zip"
-        ],
-        "category": "public.app-category.education",
-        "icon": "assets/autodesk-tinkercad.png"
-      },
+  "build": {
+    "appId": "com.tinkercad.desktop",
+    "productName": "Tinkercad QHL",
+    "directories": {
+      "output": "dist"
+    },
+    "win": {
+      "target": [
+        "portable",
+        "zip"
+      ],
+      "defaultArch": "x64",
+      "icon": "assets/autodesk-tinkercad.png"
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "zip"
+      ],
+      "category": "Education",
+      "icon": "assets/autodesk-tinkercad.png"
+    },
+    "mac": {
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.education",
+      "icon": "assets/autodesk-tinkercad.png"
+    },
     "extraResources": [
       {
         "from": "arduino",
@@ -101,7 +104,7 @@
     ]
   },
   "dependencies": {
-    "electron-prompt": "^1.7.0",
-    "@microbit/microbit-fs": "^0.10.0"
+    "@microbit/microbit-fs": "^0.10.0",
+    "electron-prompt": "^1.7.0"
   }
 }
