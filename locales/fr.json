@@ -6,8 +6,20 @@
       "installArduino": {
         "label": "Installer le compilateur Arduino",
         "notifications": {
+          "checking": "Vérification de la dernière version d'Arduino CLI...",
+          "downloading": "Téléchargement d'Arduino CLI en cours...",
           "success": "Compilateur Arduino installé avec succès",
-          "error": "Erreur lors de l'installation du compilateur Arduino"
+          "error": "Erreur lors de l'installation du compilateur Arduino",
+          "errorVersion": "Impossible de récupérer la dernière version d'Arduino CLI",
+          "errorPlatform": "Plateforme non supportée pour Arduino CLI",
+          "errorArchive": "Archive introuvable après téléchargement",
+          "errorExtract": "Erreur lors de l'extraction",
+          "errorBinaryNotFound": "Binaire Arduino CLI introuvable après extraction",
+          "errorDownload": "Erreur lors du téléchargement",
+          "errorPowerShell": "Erreur PowerShell",
+          "extracting": "Extraction d'Arduino CLI en cours...",
+          "installingCore": "Installation du compilateur Arduino en cours...",
+          "installingCoreAvr": "Installation de la chaîne de compilation arduino:avr..."
         }
       },
       "quit": "Quitter"
@@ -77,10 +89,16 @@
         "uploadProgressHexWritten": "Fichier HEX écrit sur la carte.\nVérification du téléversement en cours...",
         "invalidCode": "Le code n'est pas un fichier .hex compilé",
         "installProgress": "Installation des runtimes MicroPython...",
+        "downloadHexProgress": "Téléchargement {name}... {percent}%",
+        "downloadHexProgressBytes": "Téléchargement {name}... {received} Mo",
         "installSuccess": "Runtimes V1 et V2 installés",
         "installPartial": "Runtime MicroPython partiellement installé (V1 ou V2)",
         "installPartialDetails": "V1: {v1Status}, V2: {v2Status}",
         "installError": "Impossible d'installer les runtimes MicroPython (vérifiez les droits d'écriture)",
+        "installErrorDetail": "Détail : {error}",
+        "installErrorDetailFallback": "Vérifiez la connexion Internet et les droits d'écriture du dossier de cache.",
+        "installErrorCacheDir": "Erreur : impossible de créer le répertoire de cache.\n{message}\n\nVérifiez les permissions d'écriture.",
+        "installErrorCacheNotWritable": "Le dossier de cache n'est pas inscriptible (test d'écriture échoué).\n\nDéplacez l'application (dossier complet) dans un emplacement où vous avez les droits d'écriture (ex. Bureau, D:\\Apps) ou exécutez une fois en tant qu'administrateur pour créer le dossier.\n\nCache : {path}",
         "installErrorMissing": "Fichiers HEX MicroPython introuvables. Utilisez \"Micro:bit > Installer les runtimes\" pour les télécharger.",
         "cachePath": "Cache: {path}",
         "installManual": "Runtimes introuvables en ligne. Placez MICROBIT.hex (V2) et/ou MICROBIT_V1.hex (V1) dans le cache.",
@@ -132,6 +150,13 @@
       "makeDonation": "Faire un don",
       "requestInvoice": "Enseignants, demandez une facture"
     },
+    "errors": {
+      "unknownError": "Erreur inconnue",
+      "unknownErrorUpload": "Erreur inconnue lors de la compilation/téléversement",
+      "arduinoCliUnavailable": "Arduino CLI n'est pas disponible",
+      "compileErrorPrefix": "Erreur lors de la compilation: "
+    },
+    "arduino": "Arduino",
     "startup": {
       "warningTitle": "Binaires manquants",
       "warningMessage": "Certains binaires requis sont introuvables",

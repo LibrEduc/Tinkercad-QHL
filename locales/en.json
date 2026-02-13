@@ -6,8 +6,20 @@
       "installArduino": {
         "label": "Install Arduino Compiler",
         "notifications": {
+          "checking": "Checking for latest Arduino CLI version...",
+          "downloading": "Downloading Arduino CLI...",
           "success": "Arduino compiler installed successfully",
-          "error": "Error installing Arduino compiler"
+          "error": "Error installing Arduino compiler",
+          "errorVersion": "Could not retrieve latest Arduino CLI version",
+          "errorPlatform": "Platform not supported for Arduino CLI",
+          "errorArchive": "Archive not found after download",
+          "errorExtract": "Extraction error",
+          "errorBinaryNotFound": "Arduino CLI binary not found after extraction",
+          "errorDownload": "Download error",
+          "errorPowerShell": "PowerShell error",
+          "extracting": "Extracting Arduino CLI...",
+          "installingCore": "Installing Arduino compiler...",
+          "installingCoreAvr": "Installing arduino:avr compilation chain..."
         }
       },
       "quit": "Quit"
@@ -77,10 +89,16 @@
         "uploadProgressHexWritten": "HEX file written to the board.\nChecking upload status...",
         "invalidCode": "Code is not a compiled .hex file",
         "installProgress": "Installing MicroPython runtimes...",
+        "downloadHexProgress": "Downloading {name}... {percent}%",
+        "downloadHexProgressBytes": "Downloading {name}... {received} MB",
         "installSuccess": "MicroPython V1 and V2 runtimes installed",
         "installPartial": "MicroPython runtime partially installed (V1 or V2)",
         "installPartialDetails": "V1: {v1Status}, V2: {v2Status}",
         "installError": "Unable to install MicroPython runtimes (check write permissions)",
+        "installErrorDetail": "Detail: {error}",
+        "installErrorDetailFallback": "Check Internet connection and write permissions for the cache folder.",
+        "installErrorCacheDir": "Error: unable to create cache directory.\n{message}\n\nCheck write permissions.",
+        "installErrorCacheNotWritable": "Cache folder is not writable (write test failed).\n\nMove the application (entire folder) to a location where you have write access (e.g. Desktop, D:\\Apps) or run once as administrator to create the folder.\n\nCache: {path}",
         "installErrorMissing": "MicroPython HEX files not found. Use \"Micro:bit > Install runtimes\" to download them.",
         "cachePath": "Cache: {path}",
         "installManual": "Runtimes unavailable online. Place MICROBIT.hex (V2) and/or MICROBIT_V1.hex (V1) in the cache.",
@@ -132,6 +150,13 @@
       "makeDonation": "Make a donation",
       "requestInvoice": "Teachers, request an invoice"
     },
+    "errors": {
+      "unknownError": "Unknown error",
+      "unknownErrorUpload": "Unknown error during compile/upload",
+      "arduinoCliUnavailable": "Arduino CLI is not available",
+      "compileErrorPrefix": "Compilation error: "
+    },
+    "arduino": "Arduino",
     "startup": {
       "warningTitle": "Missing binaries",
       "warningMessage": "Some required binaries are missing",

@@ -4,7 +4,7 @@
   "main": "index.js",
   "date": "2025-02-01",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test test/utils.test.js test/pythonUtils.test.js",
     "start": "electron .",
     "start:debug": "cross-env TINKERCAD_DEBUG=1 electron .",
     "build": "electron-builder",
@@ -22,8 +22,8 @@
   "description": "Application desktop Tinkercad QHL — compilation et téléversement Arduino et micro:bit",
   "repository": "github:LibrEduc/TinkercadOffline",
   "devDependencies": {
-    "cross-env": "^7.0.3",
-    "electron": "^40.1.0",
+    "cross-env": "^10.1.0",
+    "electron": "^40.2.1",
     "electron-builder": "^26.7.0",
     "sharp": "^0.34.5"
   },
@@ -39,7 +39,8 @@
         "zip"
       ],
       "defaultArch": "x64",
-      "icon": "assets/autodesk-tinkercad.png"
+      "icon": "assets/autodesk-tinkercad.png",
+      "executableName": "Tinkercad QHL"
     },
     "linux": {
       "target": [
@@ -61,13 +62,6 @@
       {
         "from": "arduino",
         "to": "../arduino",
-        "filter": [
-          "**/*"
-        ]
-      },
-      {
-        "from": "sketch",
-        "to": "../sketch",
         "filter": [
           "**/*"
         ]

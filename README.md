@@ -56,6 +56,29 @@ Si c'est la première fois que vous utilisez l'application :
 1. Allez dans **Fichier > Langue**
 2. Sélectionnez **English** ou **Français**
 
+## 🏗️ Structure du projet (maintenance)
+
+- **`index.js`** : Processus principal Electron — IPC, fenêtre, état (ports, micro:bit), orchestration. En-tête du fichier décrit les blocs de lignes.
+- **`lib/`** :
+  - **`paths.js`** : Chemins app (dev/prod), Arduino CLI, micro:bit, locales.
+  - **`constants.js`** : Constantes (délais, regex MakeCode, noms fichiers).
+  - **`platform.js`** : Détection Windows / macOS / Linux.
+  - **`logger.js`** : Logs console + fichier (si `TINKERCAD_DEBUG=1`).
+  - **`notifications.js`** : Affichage des notifications dans la fenêtre.
+  - **`arduino.js`** : Arduino CLI (commandes, téléchargement, compilation, téléversement).
+  - **`codeExtraction.js`** : Extraction du code depuis l’éditeur Tinkercad (webview).
+  - **`microbitConversion.js`** : Conversion MakeCode Python → MicroPython.
+  - **`pythonUtils.js`** : Nettoyage du code Python, validation syntaxe.
+  - **`menu.js`** : Construction du menu (Fichier, Arduino, micro:bit, Affichage, Aide) à partir d’un contexte.
+  - **`download.js`** : Téléchargement HTTP/HTTPS avec progression optionnelle.
+  - **`github.js`** : URLs des releases (Arduino CLI, HEX micro:bit).
+  - **`updates.js`** : Vérification des mises à jour.
+  - **`fileCache.js`** : Cache d’existence de fichiers (éviction FIFO, TTL).
+  - **`utils.js`** : Utilitaires partagés (safeUnlink, safeClose).
+- **`locales/`** : Traductions (fr.json, en.json). Clés utilisées par `index.js` et `menu.js`.
+- **Modifier une chaîne affichée** : chercher la clé dans `locales/fr.json` ou `locales/en.json`.
+- **Modifier le menu** : `lib/menu.js` (template) ; le contexte est fourni par `getMenuContext()` dans `index.js`.
+
 ## 📝 Notes importantes
 
 - L'application nécessite une connexion Internet pour accéder à Tinkercad
@@ -138,6 +161,29 @@ If this is the first time you're using the application:
 
 1. Go to **File > Language**
 2. Select **English** or **Français**
+
+## 🏗️ Project structure (maintenance)
+
+- **`index.js`** : Electron main process — IPC, window, state (ports, micro:bit), orchestration. File header describes line blocks.
+- **`lib/`** :
+  - **`paths.js`** : App paths (dev/prod), Arduino CLI, micro:bit, locales.
+  - **`constants.js`** : Constants (intervals, MakeCode regex, file names).
+  - **`platform.js`** : Windows / macOS / Linux detection.
+  - **`logger.js`** : Console and optional file logging (`TINKERCAD_DEBUG=1`).
+  - **`notifications.js`** : In-window notifications.
+  - **`arduino.js`** : Arduino CLI (commands, download, compile, upload).
+  - **`codeExtraction.js`** : Code extraction from Tinkercad editor (webview).
+  - **`microbitConversion.js`** : MakeCode Python → MicroPython conversion.
+  - **`pythonUtils.js`** : Python code cleaning and syntax validation.
+  - **`menu.js`** : Menu building (File, Arduino, micro:bit, View, Help) from a context object.
+  - **`download.js`** : HTTP/HTTPS download with optional progress.
+  - **`github.js`** : Release URLs (Arduino CLI, micro:bit HEX).
+  - **`updates.js`** : Update check.
+  - **`fileCache.js`** : File existence cache (FIFO eviction, TTL).
+  - **`utils.js`** : Shared helpers (safeUnlink, safeClose).
+- **`locales/`** : Translations (fr.json, en.json). Keys used by `index.js` and `menu.js`.
+- **To change a displayed string** : look up the key in `locales/fr.json` or `locales/en.json`.
+- **To change the menu** : edit `lib/menu.js` (template); context is provided by `getMenuContext()` in `index.js`.
 
 ## 📝 Important Notes
 

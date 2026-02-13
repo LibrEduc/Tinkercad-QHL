@@ -93,6 +93,9 @@
         .button-group button:first-child:active {
             background: #444;
         }
+
+        .message.error { color: #c00; }
+        .message.success { color: #080; }
     </style>
 </head>
 <body>
@@ -102,6 +105,7 @@
     </div>
     <div class="content">
         <input type="text" id="libraryName" placeholder="" autofocus>
+        <div id="message" class="message" style="display: none; font-size: 13px; margin-top: 8px;"></div>
         <div class="button-group">
             <button id="submitBtn"></button>
             <button id="cancelBtn"></button>
@@ -111,25 +115,16 @@
         // Load translations from the main process
         async function loadTranslations() {
             try {
-                const translationPromises = {
-                    prompt: window.api.getTranslation('menu.installLibrary.prompt'),
-                    submitLabel: window.api.getTranslation('menu.installLibrary.label'),
-                    cancelLabel: window.api.getTranslation('menu.file.quit'),
-                    title: window.api.getTranslation('menu.installLibrary.label')
-                };
-
-                // Wait for all translations to be resolved
-                const translations = await Promise.all([
-                    translationPromises.prompt,
-                    translationPromises.submitLabel,
-                    translationPromises.cancelLabel,
-                    translationPromises.title
-                ]).then(([prompt, submitLabel, cancelLabel, title]) => ({
-                    prompt,
-                    submitLabel,
-                    cancelLabel,
-                    title
-                }));
+                const [prompt, submitLabel, cancelLabel, title, submitSuccess, submitError] = await Promise.all([
+                    window.api.getTranslation('menu.installLibrary.prompt'),
+                    window.api.getTranslation('menu.installLibrary.label'),
+                    window.api.getTranslation('menu.file.quit'),
+                    window.api.getTranslation('menu.installLibrary.label'),
+                    window.api.getTranslation('menu.installLibrary.notifications.success'),
+                    window.api.getTranslation('menu.installLibrary.notifications.error')
+                ]);
+                window.translations = { prompt, submitLabel, cancelLabel, title, submitSuccess, submitError };
+                const translations = window.translations;
 
                 const libraryInput = document.getElementById('libraryName');
                 const submitBtn = document.getElementById('submitBtn');
@@ -152,11 +147,33 @@
         // Call loadTranslations immediately
         loadTranslations();
 
+        function showMessage(text, type) {
+            const el = document.getElementById('message');
+            el.textContent = text;
+            el.className = 'message ' + (type || '');
+            el.style.display = text ? 'block' : 'none';
+        }
+
         function submitLibrary() {
             const libraryName = document.getElementById('libraryName').value.trim();
-            if (libraryName) {
-                window.api.installLibrary(libraryName);
-            }
+            if (!libraryName) return;
+            const submitBtn = document.getElementById('submitBtn');
+            submitBtn.disabled = true;
+            showMessage('');
+
+            const cleanup = window.api.onInstallLibraryDone((result) => {
+                cleanup();
+                submitBtn.disabled = false;
+                const t = window.translations || {};
+                if (result.ok) {
+                    showMessage(t.submitSuccess || 'Library installed.', 'success');
+                    setTimeout(() => window.api.closeWindow(), 800);
+                } else {
+                    showMessage(result.error || t.submitError || 'Error', 'error');
+                }
+            });
+
+            window.api.installLibrary(libraryName);
         }
 
         document.getElementById('libraryName').addEventListener('keypress', (e) => {

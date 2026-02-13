@@ -1,201 +1,47 @@
-const { app, BrowserWindow, Menu, clipboard, ipcMain, webContents } = require('electron');
+/**
+ * Tinkercad QHL - Point d'entrée Electron (processus principal)
+ *
+ * Organisation du fichier (pour maintenance) :
+ * - Lignes ~28-120  : IPC (get-translation, get-icon-paths), handlers upload
+ * - ~120-220        : Traductions, createWindow
+ * - ~275-420        : Helpers (safeExecute, getMainWindow, areListsEqual, isMicrobitDrive)
+ * - ~420-470        : loadHexFile, ensureMicroPythonHexes
+ * - ~470-650        : showConvertedCodeWindow (fenêtre code converti)
+ * - ~650-820        : compilePythonToHex (micro:bit)
+ * - ~820-1010       : listMicrobitDrives, updateMicrobitDrivesList
+ * - ~1010-1100      : runArduinoUploadFlow, runMicrobitUploadFlow
+ * - ~1100-1320      : checkRequiredBinaries, installMicroPythonRuntimes
+ * - ~1320-1450      : listArduinoBoards
+ * - ~1450-1580      : app.whenReady, switchLanguage, getMenuContext, refreshMenu, updateBoardStatusIcons
+ */
+const { app, BrowserWindow, Menu, clipboard, ipcMain, webContents, shell, dialog } = require('electron');
 const path = require('node:path');
-const https = require('https');
 const fs = require('fs');
-const { exec, execSync, spawn, execFile } = require('child_process');
+const { exec } = require('child_process');
 const { MicropythonFsHex, microbitBoardId } = require('@microbit/microbit-fs');
 
-/**
- * Détecte si l'application est en mode développement (non packagée)
- * @returns {boolean} true si en mode développement, false si packagée
- */
-function isDev() {
-  return !app.getAppPath().includes('app.asar');
-}
-const directory = isDev() ? __dirname : app.getAppPath();
-// En production, extraResources est dans le même dossier que app.asar (resources/)
-// app.getAppPath() retourne le chemin vers app.asar, donc path.dirname() donne resources/
-const directoryAppAsar = isDev() ? directory : path.dirname(directory);
+const { isDev, directory, directoryAppAsar, PATHS, getPortableDataDir, ensurePortableDataDir, getExtraResourcePath } = require('./lib/paths');
+const { CONSTANTS, DETECTION_INTERVAL, MICROBIT_DETAILS_PATTERNS } = require('./lib/constants');
+const { isMakeCodePython, convertMakeCodeToMicroPython } = require('./lib/microbitConversion');
+const { cleanPythonCode, validatePythonSyntax, validatePythonSyntaxWithDisplay } = require('./lib/pythonUtils');
+const { isWindows, isMac } = require('./lib/platform');
+const { parseBoardListJson, parseBoardListText, buildArduinoMenuList, boardListsEqual } = require('./lib/boardDetection');
+const { logger, logFile, DEBUG_FILE_LOGGING } = require('./lib/logger');
+const { showNotification } = require('./lib/notifications');
+const { getMicrobitV1HexUrl, getMicrobitV2HexUrl } = require('./lib/github');
+const { checkForUpdates } = require('./lib/updates');
+const { downloadToFile } = require('./lib/download');
+const { CODE_EXTRACTION_SCRIPT, normalizeUnicode, executeScriptInWebview, extractCodeFromEditor } = require('./lib/codeExtraction');
+const {
+    buildArduinoCliCommand,
+    execCommand,
+    ensureArduinoCli,
+    compileAndUploadArduino
+} = require('./lib/arduino');
+const { fileCache } = require('./lib/fileCache');
+const { buildApplicationMenu } = require('./lib/menu');
 
-// ============================================================================
-// CONSTANTES
-// ============================================================================
-const CONSTANTS = {
-    EMPTY_CODE: 'empty',
-    PROGRAM_HEX_FILENAME: 'PROGRAM.HEX',
-    LINE_BREAK: '\\r\\n',
-    NOTIFICATION_DELAY: 300,        // Délai d'animation de notification (ms)
-    NOTIFICATION_DURATION: 3000,    // Durée d'affichage de la notification (ms)
-    DEFAULT_MICROBIT_VOLUME_NAME: 'MICROBIT'  // Nom par défaut du volume micro:bit
-};
-
-// ============================================================================
-// CHEMINS PRINCIPAUX
-// ============================================================================
-// Déterminer le nom de l'exécutable Arduino CLI selon la plateforme
-const getArduinoCliExecutable = () => {
-    let basePath;
-    if (isDev()) {
-        basePath = path.join(directoryAppAsar, './arduino');
-    } else {
-        // En production, extraResources avec "to": "../arduino" sont au niveau parent de resources/
-        const exePath = process.execPath;
-        const appDir = path.dirname(exePath);
-        basePath = path.join(appDir, 'arduino');
-    }
-    
-    if (process.platform === 'win32') {
-        return path.join(basePath, 'arduino-cli.exe');
-    } else if (process.platform === 'darwin') {
-        return path.join(basePath, 'arduino-cli');
-    } else {
-        // Linux
-        return path.join(basePath, 'arduino-cli');
-    }
-};
-
-// Fonction helper pour obtenir le chemin des extraResources en production
-const getExtraResourcePath = (resourceName) => {
-    if (isDev()) {
-        return path.join(directoryAppAsar, resourceName);
-    } else {
-        // En production, extraResources avec "to": "../resourceName" sont au niveau parent de resources/
-        const exePath = process.execPath;
-        const appDir = path.dirname(exePath);
-        return path.join(appDir, resourceName);
-    }
-};
-
-/**
- * Dossier de données portable (à côté de l'exécutable en prod, du projet en dev).
- * Permet une utilisation 100 % portable : aucun écrit dans AppData / userData.
- */
-function getPortableDataDir() {
-    const appDir = isDev() ? __dirname : path.dirname(process.execPath);
-    return path.join(appDir, 'data');
-}
-
-function ensurePortableDataDir() {
-    const dir = getPortableDataDir();
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-    }
-}
-
-const PATHS = {
-    arduinoCli: getArduinoCliExecutable(),
-    arduinoConfig: (() => {
-        const arduinoDir = isDev() ? path.join(directoryAppAsar, 'arduino') : getExtraResourcePath('arduino');
-        return path.join(arduinoDir, 'arduino-cli.yaml');
-    })(),
-    sketch: path.join(directory, 'sketch', 'sketch.ino'),
-    locales: path.join(directory, 'locales'),
-    icon: path.join(directory, 'autodesk-tinkercad.png'),
-    preload: path.join(directory, 'preload.js'),
-    microbit: {
-        v1: path.join(getExtraResourcePath('microbit'), 'MICROBIT_V1.hex'),
-        v2: path.join(getExtraResourcePath('microbit'), 'MICROBIT.hex'),
-        cache: path.join(getPortableDataDir(), 'microbit-cache')
-    }
-};
-
-// ============================================================================
-// SCRIPTS JAVASCRIPT POUR L'EXTRACTION DE CODE
-// ============================================================================
-// Fonction helper pour normaliser le texte dans le script d'extraction
-// Note: Cette fonction est utilisée dans le script JavaScript exécuté dans le navigateur
-// Les helpers Node.js (normalizeQuotes, normalizeDashes) ne peuvent pas être utilisés ici
-const CODE_EXTRACTION_SCRIPT = `
-    (() => {
-        // Essayer plusieurs sélecteurs pour trouver l'éditeur
-        let editorElement = document.querySelector('.CodeMirror-code');
-        if (!editorElement) {
-            editorElement = document.querySelector('.CodeMirror-lines');
-        }
-        if (!editorElement) {
-            editorElement = document.querySelector('.cm-editor .cm-content');
-        }
-        if (!editorElement) {
-            editorElement = document.querySelector('[class*="CodeMirror"]');
-        }
-        if (!editorElement) {
-            // Chercher dans les éléments avec du code Python visible
-            const codeContainers = document.querySelectorAll('[class*="code"], [class*="editor"], [class*="program"], pre, code');
-            for (const container of codeContainers) {
-                const text = container.textContent || container.innerText;
-                if (text && text.trim().length > 10 && 
-                    (text.includes('def ') || text.includes('import ') || text.includes('basic.') || text.includes('input.'))) {
-                    editorElement = container;
-                    break;
-                }
-            }
-        }
-        
-        if (!editorElement) {
-            return '${CONSTANTS.EMPTY_CODE}';
-        }
-        const clonedElement = editorElement.cloneNode(true);
-        const gutterWrappers = clonedElement.querySelectorAll('.CodeMirror-gutter-wrapper, .cm-gutter, [class*="gutter"]');
-        gutterWrappers.forEach(wrapper => wrapper.remove());
-        
-        // Essayer plusieurs méthodes d'extraction
-        let codeText = '';
-        const preElements = clonedElement.querySelectorAll('pre');
-        if (preElements.length > 0) {
-            codeText = Array.from(preElements)
-                .map(pre => pre.textContent || pre.innerText || '')
-                .join('\\r\\n');
-        } else {
-            // Fallback: texte direct
-            codeText = clonedElement.textContent || clonedElement.innerText || '';
-        }
-        
-        if (codeText) {
-            codeText = codeText
-                .replace(/[\\u2018\\u2019\\u201C\\u201D]/g, '"')  // Normaliser les guillemets
-                .replace(/[\\u2013\\u2014]/g, '-')                // Normaliser les tirets
-                .replace(/[\\u200B]/g, '')                         // Supprimer les espaces insécables
-                .trim();
-        }
-        
-        return codeText && codeText !== 'undefined' && codeText.length > 0 ? codeText : '${CONSTANTS.EMPTY_CODE}';
-    })()
-`;
-
-
-// ============================================================================
-// CACHE POUR LES VÉRIFICATIONS DE FICHIERS
-// ============================================================================
-const fileCache = {
-    _cache: new Map(),
-    _timestamps: new Map(),
-    TTL: 5000, // 5 secondes
-
-    exists(path) {
-        const now = Date.now();
-        const cached = this._cache.get(path);
-        const timestamp = this._timestamps.get(path);
-
-        if (cached !== undefined && timestamp && (now - timestamp) < this.TTL) {
-            return cached;
-        }
-
-        const exists = fs.existsSync(path);
-        this._cache.set(path, exists);
-        this._timestamps.set(path, now);
-        return exists;
-    },
-
-    invalidate(path) {
-        this._cache.delete(path);
-        this._timestamps.delete(path);
-    },
-
-    clear() {
-        this._cache.clear();
-        this._timestamps.clear();
-    }
-};
+const packageInfo = require('./package.json');
 
 // IPC handlers for library dialog
 ipcMain.on('close-library-dialog', (event) => {
@@ -288,98 +134,56 @@ ipcMain.handle('get-icon-paths', (event) => {
 // Handle upload requests from toolbar icons
 ipcMain.on('upload-arduino', (event) => {
     const mainWindow = BrowserWindow.fromWebContents(event.sender);
-    if (mainWindow) {
-        // Simuler le clic sur le menu "Téléverser le programme" Arduino
-        const t = translations.menu;
-        if (!selectedPort) {
-            showNotification(mainWindow, t.uploadCode.notifications.noPort);
-            return;
-        }
-        const portExists = previousBoards.some(board => board.port === selectedPort);
-        if (!portExists) {
-            showNotification(mainWindow, t.uploadCode.notifications.falsePort);
-            return;
-        }
-        extractCodeFromEditor(mainWindow).then(code => {
-            if (code === CONSTANTS.EMPTY_CODE) {
-                showNotification(mainWindow, t.copyCode.notifications.empty);
-                return;
-            }
-            compileAndUploadArduino(code, selectedPort, mainWindow).catch(error => {
-                logger.error('Error in Arduino upload process:', error);
-            });
-        }).catch(error => {
-            logger.error('Error extracting code:', error);
-            showNotification(mainWindow, t.copyCode.notifications.error);
-        });
-    }
+    if (mainWindow) runArduinoUploadFlow(mainWindow);
 });
 
 ipcMain.on('upload-microbit', (event) => {
     const mainWindow = BrowserWindow.fromWebContents(event.sender);
-    if (mainWindow) {
-        // Simuler le clic sur le menu "Téléverser le programme" micro:bit
-        const t = translations.menu;
-        if (!selectedMicrobitDrive) {
-            showNotification(mainWindow, t.microbit.notifications.noDrive || 'Aucune micro:bit sélectionnée');
-            return;
-        }
-        extractCodeFromEditor(mainWindow, { useAdvancedSelectors: true }).then(code => {
-            if (code === CONSTANTS.EMPTY_CODE) {
-                showNotification(mainWindow, t.copyCode.notifications.empty);
-                return;
-            }
-            // Utiliser la même logique que le menu micro:bit
-            let microPythonCode = code;
-            if (code.includes('basic.') || code.includes('IconNames.') || code.includes('basic.forever')) {
-                microPythonCode = convertMakeCodeToMicroPython(code);
-            } else if (!microPythonCode.includes('from microbit import')) {
-                microPythonCode = 'from microbit import *\n\n' + microPythonCode;
-            }
-            
-            compilePythonToHex(microPythonCode).then(hexContent => {
-                const firmwareName = CONSTANTS.PROGRAM_HEX_FILENAME;
-                const finalPath = path.join(selectedMicrobitDrive, firmwareName);
-                fs.writeFile(finalPath, hexContent, 'utf8', (err) => {
-                    if (err) {
-                        logger.error('Error writing HEX file to micro:bit:', err && err.stack ? err.stack : err);
-                        showNotification(mainWindow, t.microbit.notifications.uploadError || 'Erreur lors de l\'écriture du fichier HEX');
-                        return;
-                    }
-                    logger.info('HEX file written successfully to', finalPath);
-                    showNotification(mainWindow, t.microbit.notifications.uploadSuccess || 'Fichier HEX copié sur la carte micro:bit.');
-                });
-            }).catch(err => {
-                logger.error('Error compiling Python to HEX:', err && err.stack ? err.stack : err);
-                const errorMsg = (err && err.message) ? err.message : (err && err.toString) ? err.toString() : 'Erreur inconnue';
-                showNotification(mainWindow, (t.microbit.notifications.uploadError || 'Erreur de compilation') + '\n' + errorMsg);
-            });
-        }).catch(error => {
-            logger.error('Error extracting code from editor:', error);
-            showNotification(mainWindow, t.copyCode.notifications.error);
-        });
-    }
+    if (mainWindow) runMicrobitUploadFlow(mainWindow);
 });
 
 ipcMain.on('install-library', (event, libraryName) => {
-    const win = BrowserWindow.fromWebContents(event.sender);
+    const sender = event.sender;
+    const win = BrowserWindow.fromWebContents(sender);
     const mainWindow = getMainWindowExcluding(win);
+    const t = translations.menu;
 
-    if (!libraryName) {
+    const reply = (result) => {
+        try {
+            if (!sender.isDestroyed()) sender.send('install-library-done', result);
+        } catch (_) {}
+    };
+
+    if (!libraryName || typeof libraryName !== 'string') {
         if (mainWindow) showNotification(mainWindow, t.installLibrary.notifications.empty);
+        reply({ ok: false, error: t.installLibrary.notifications.empty });
+        return;
+    }
+    const sanitized = libraryName.trim().replace(/[^\w\s.-]/g, '');
+    if (!sanitized) {
+        if (mainWindow) showNotification(mainWindow, t.installLibrary.notifications.empty);
+        reply({ ok: false, error: t.installLibrary.notifications.empty });
         return;
     }
 
     if (mainWindow) showNotification(mainWindow, t.installLibrary.notifications.progress);
 
-    execCommand(buildArduinoCliCommand(`lib install ${libraryName}`), {
+    execCommand(buildArduinoCliCommand(`lib install "${sanitized}"`), {
         browserWindow: mainWindow,
         showError: t.installLibrary.notifications.error,
         showSuccess: t.installLibrary.notifications.success,
-        onSuccess: () => { if (win) win.close(); },
-        onError: () => { if (win) win.close(); }
+        onSuccess: () => {
+            reply({ ok: true });
+            if (win) win.close();
+        },
+        onError: (error) => {
+            const message = error && error.message ? error.message : String(error);
+            reply({ ok: false, error: message });
+            if (win) win.close();
+        }
     }).catch(error => {
         logger.error(`Error installing library: ${error}`);
+        reply({ ok: false, error: error && error.message ? error.message : String(error) });
     });
 });
 
@@ -404,12 +208,39 @@ function loadTranslations(locale) {
     }
 }
 
-// Get system locale and handle language code extraction
+// Get system locale and handle language code extraction (ex: 'en-US' -> 'en')
 const rawLocale = app.getLocale();
-const systemLocale = rawLocale ? rawLocale.split('-')[0] : 'en';
+const systemLocale = (rawLocale || '').split('-')[0] || 'en';
 let translations = loadTranslations(systemLocale);
 let currentLocale = systemLocale;
-let selectedBoard = "";
+
+const CONFIG_FILENAME = 'config.json';
+
+/** Retourne la langue mémorisée ('fr' ou 'en') ou null si absente/invalide */
+function getSavedLocale() {
+    try {
+        const configPath = path.join(getPortableDataDir(), CONFIG_FILENAME);
+        if (fs.existsSync(configPath)) {
+            const data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+            if (data.locale === 'fr' || data.locale === 'en') return data.locale;
+        }
+    } catch (e) {
+        logger.debug('getSavedLocale:', e.message);
+    }
+    return null;
+}
+
+/** Enregistre le choix de langue dans le dossier portable (data/config.json) */
+function saveLocale(locale) {
+    try {
+        ensurePortableDataDir();
+        const configPath = path.join(getPortableDataDir(), CONFIG_FILENAME);
+        fs.writeFileSync(configPath, JSON.stringify({ locale }, null, 2), 'utf8');
+    } catch (e) {
+        logger.warn('Could not save locale:', e.message);
+    }
+}
+let selectedBoard = '';
 
 // Only fallback to English if the translation file doesn't exist or is invalid
 if (!translations) {
@@ -417,40 +248,7 @@ if (!translations) {
     translations = loadTranslations('en');
 }
 
-// Create custom menu template
-const t = translations.menu;
-const template = [
-    {
-        label: t.file.label,
-        submenu: [
-            {
-                label: t.file.language,
-                submenu: [
-                    {
-                        label: 'English',
-                        type: 'radio',
-                        checked: systemLocale === 'en',
-                        click: () => switchLanguage('en')
-                    },
-                    {
-                        label: 'Français',
-                        type: 'radio',
-                        checked: systemLocale === 'fr',
-                        click: () => switchLanguage('fr')
-                    }
-                ]
-            },
-            { type: 'separator' },
-            { role: 'quit', label: t.file.quit }
-        ]
-    }
-];
-
-// Build menu from template
-const menu = Menu.buildFromTemplate(template);
-
-// Set the custom menu
-Menu.setApplicationMenu(menu);
+// Menu : construit au premier refreshMenu() (dans app.whenReady via switchLanguage(systemLocale))
 
 /**
  * Crée la fenêtre principale de l'application Electron
@@ -465,7 +263,7 @@ function createWindow() {
             nodeIntegration: false,
             contextIsolation: true,
             sandbox: true,
-            preload: PATHS.preload,
+            preload: path.resolve(directory, 'preload.js'),
             webviewTag: true  // Nécessaire pour utiliser les balises <webview>
         }
     });
@@ -503,105 +301,22 @@ function createWindow() {
 
     // Handle new window creation
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-        require('electron').shell.openExternal(url);
+        shell.openExternal(url);
         return { action: 'deny' };
     });
 }
 
 // ============================================================================
-// CONSTANTES
-// ============================================================================
-const DETECTION_INTERVAL = 2000; // Intervalle de détection des cartes (ms)
-const PWM_DUTY_CYCLE = 512; // Duty cycle pour PWM (50%)
-
-// Patterns de détection pour micro:bit
-const MICROBIT_DETAILS_PATTERNS = [
-    'DAPLink',
-    'Interface Version',
-    'HIC ID',
-    'Unique ID:',
-    'Version:'
-];
-
-// Patterns de détection pour code MakeCode Python
-const MAKECODE_PATTERNS = [
-    'basic.',
-    'IconNames.',
-    'basic.forever',
-    'input.on_',
-    'pins.analog_pitch'
-];
-
-// ============================================================================
 // HELPERS ET UTILITAIRES
 // ============================================================================
 
-// Mode debug fichier : activé par TINKERCAD_DEBUG=1 (npm run start:debug) ou par build:win:debug
-let DEBUG_FILE_LOGGING = false;
-try {
-    DEBUG_FILE_LOGGING = process.env.TINKERCAD_DEBUG === '1' || require('./debug-mode.js');
-} catch (e) {
-    DEBUG_FILE_LOGGING = false;
-}
-
-ensurePortableDataDir();
-const logFile = path.join(getPortableDataDir(), 'debug.log');
-const logStream = DEBUG_FILE_LOGGING ? fs.createWriteStream(logFile, { flags: 'a' }) : null;
-
-function writeLog(level, ...args) {
-    const timestamp = new Date().toISOString();
-    const message = `[${timestamp}] [${level}] ${args.map(arg =>
-        typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)
-    ).join(' ')}\n`;
-
-    if (logStream) {
-        try {
-            logStream.write(message);
-        } catch (err) {
-            // Ignorer les erreurs d'écriture
-        }
-    }
-
-    // Aussi dans la console
-    if (level === 'DEBUG') {
-        console.log('[DEBUG]', ...args);
-    } else if (level === 'INFO') {
-        console.log('[INFO]', ...args);
-    } else if (level === 'WARN') {
-        console.warn('[WARN]', ...args);
-    } else if (level === 'ERROR') {
-        console.error('[ERROR]', ...args);
-    }
-}
-
-const logger = {
-    debug: (...args) => {
-        writeLog('DEBUG', ...args);
-    },
-    info: (...args) => {
-        writeLog('INFO', ...args);
-    },
-    warn: (...args) => {
-        writeLog('WARN', ...args);
-    },
-    error: (...args) => {
-        writeLog('ERROR', ...args);
-    }
-};
-
-// Logger le démarrage
 logger.info('Application started');
 if (DEBUG_FILE_LOGGING) {
     logger.info(`Log file: ${logFile}`);
 }
-logger.info(`Platform: ${process.platform}`);
+logger.info(`Platform: ${isWindows ? 'win32' : isMac ? 'darwin' : 'linux'}`);
 logger.info(`Node version: ${process.version}`);
 logger.info(`Electron version: ${process.versions.electron}`);
-
-// Obtenir le répertoire app.asar de manière cohérente
-function getAppAsarDirectory() {
-    return directoryAppAsar;
-}
 
 /**
  * Exécute une fonction de manière sécurisée, en gérant les erreurs silencieusement
@@ -626,276 +341,6 @@ function getMainWindow() {
 function getMainWindowExcluding(excludeWindow) {
     const windows = BrowserWindow.getAllWindows();
     return windows.find(w => w !== excludeWindow) || getMainWindow();
-}
-
-/**
- * Construit la commande Arduino CLI avec le fichier de configuration
- * @param {string} arduinoCommand - La commande Arduino CLI (sans l'exécutable)
- * @returns {string} La commande complète avec l'exécutable et le fichier de configuration
- */
-function buildArduinoCliCommand(arduinoCommand) {
-    const configFile = PATHS.arduinoConfig;
-    // Avec shell: true, utiliser des guillemets pour protéger les chemins avec espaces
-    // Fonctionne de manière universelle sur Windows, Linux et macOS
-    // Le shell interprétera correctement les guillemets sur toutes les plateformes
-    
-    // Utiliser --config-file si le fichier existe, sinon Arduino CLI utilisera le fichier par défaut
-    if (fs.existsSync(configFile)) {
-        return `"${PATHS.arduinoCli}" --config-file "${configFile}" ${arduinoCommand}`;
-    }
-    return `"${PATHS.arduinoCli}" ${arduinoCommand}`;
-}
-
-// Exécuter une commande avec gestion d'erreur unifiée
-/**
- * Exécute une commande système avec gestion d'erreur unifiée
- * @param {string} command - La commande à exécuter
- * @param {Object} options - Options de configuration
- * @param {Function} options.onSuccess - Callback en cas de succès
- * @param {Function} options.onError - Callback en cas d'erreur
- * @param {string} options.showProgress - Message de progression à afficher
- * @param {string} options.showSuccess - Message de succès à afficher
- * @param {string} options.showError - Message d'erreur à afficher
- * @param {BrowserWindow|null} options.browserWindow - Fenêtre pour les notifications
- * @returns {Promise<{stdout: string, stderr: string}>} Résultat de la commande
- */
-function execCommand(command, options = {}) {
-    return new Promise((resolve, reject) => {
-        const {
-            onSuccess = () => { },
-            onError = (error) => logger.error(`Command failed: ${error}`),
-            showProgress = null,
-            showSuccess = null,
-            showError = null,
-            browserWindow = null,
-            cwd = null
-        } = options;
-
-        if (showProgress && browserWindow) {
-            showNotification(browserWindow, showProgress);
-        }
-
-        // Parser la commande pour utiliser spawn avec des arguments séparés
-        // Cela évite l'erreur "spawn cmd.exe ENOENT" dans la version compilée
-        const execOptions = { 
-            cwd: cwd || directory
-        };
-        
-        // Si la commande commence par un chemin entre guillemets, c'est une commande Arduino CLI
-        // Parser la commande pour extraire l'exécutable et les arguments
-        let executable, args;
-        if (command.startsWith('"') && command.includes('"', 1)) {
-            // Commande avec guillemets : "path/to/exe" arg1 arg2
-            const endQuote = command.indexOf('"', 1);
-            executable = command.substring(1, endQuote);
-            const rest = command.substring(endQuote + 1).trim();
-            // Parser les arguments restants (supporter les guillemets dans les arguments)
-            args = [];
-            let currentArg = '';
-            let inQuotes = false;
-            for (let i = 0; i < rest.length; i++) {
-                const char = rest[i];
-                if (char === '"') {
-                    inQuotes = !inQuotes;
-                } else if (char === ' ' && !inQuotes) {
-                    if (currentArg) {
-                        args.push(currentArg);
-                        currentArg = '';
-                    }
-                } else {
-                    currentArg += char;
-                }
-            }
-            if (currentArg) {
-                args.push(currentArg);
-            }
-            
-            logger.debug(`[DEBUG] Parsed command: executable="${executable}", args=${JSON.stringify(args)}`);
-            
-            // Normaliser le chemin de l'exécutable
-            executable = path.normalize(executable);
-            
-            // Vérifier que l'exécutable existe avant de lancer spawn
-            if (!fs.existsSync(executable)) {
-                const error = new Error(`Executable not found: ${executable}`);
-                logger.error(`[DEBUG] Executable does not exist: ${executable}`);
-                logger.error(`[DEBUG] Current working directory: ${execOptions.cwd}`);
-                logger.error(`[DEBUG] Resolved executable path: ${path.resolve(executable)}`);
-                onError(error);
-                if (showError && browserWindow) {
-                    showNotification(browserWindow, showError);
-                }
-                reject(error);
-                return;
-            }
-            
-            // Vérifier les permissions
-            try {
-                const stats = fs.statSync(executable);
-                logger.debug(`[DEBUG] Executable stats: mode=${stats.mode}, size=${stats.size}`);
-            } catch (statError) {
-                logger.warn(`[DEBUG] Could not stat executable: ${statError.message}`);
-            }
-            
-            logger.debug(`[DEBUG] About to execute: ${executable} with args: ${JSON.stringify(args)}`);
-            
-            // Utiliser execFile avec le répertoire de l'exécutable comme cwd
-            // Cela aide Windows à trouver les DLL nécessaires dans le même répertoire
-            const executableDir = path.dirname(executable);
-            const execFileOptions = {
-                ...execOptions,
-                cwd: executableDir, // Utiliser le répertoire de l'exécutable comme répertoire de travail
-                env: {
-                    ...process.env,
-                    PATH: `${executableDir}${path.delimiter}${process.env.PATH}` // Ajouter le répertoire de l'exécutable au PATH
-                }
-            };
-            
-            logger.debug(`[DEBUG] Using execFile with cwd: ${executableDir}`);
-            logger.debug(`[DEBUG] PATH: ${execFileOptions.env.PATH.substring(0, 200)}...`);
-            
-            execFile(executable, args, execFileOptions, (error, stdout, stderr) => {
-                if (error) {
-                    logger.error(`[DEBUG] execFile error: ${error.message}`);
-                    logger.error(`[DEBUG] Error code: ${error.code}`);
-                    logger.error(`[DEBUG] Error signal: ${error.signal}`);
-                    logger.error(`[DEBUG] Executable path: ${executable}`);
-                    logger.error(`[DEBUG] Executable exists: ${fs.existsSync(executable)}`);
-                    logger.error(`[DEBUG] Executable directory: ${executableDir}`);
-                    logger.error(`[DEBUG] Executable directory exists: ${fs.existsSync(executableDir)}`);
-                    
-                    // Lister les fichiers dans le répertoire de l'exécutable pour voir les DLL
-                    try {
-                        const dirContents = fs.readdirSync(executableDir);
-                        logger.debug(`[DEBUG] Files in executable directory: ${JSON.stringify(dirContents.slice(0, 10))}`);
-                    } catch (dirError) {
-                        logger.error(`[DEBUG] Could not read executable directory: ${dirError.message}`);
-                    }
-                    
-                    onError(error);
-                    if (showError && browserWindow) {
-                        showNotification(browserWindow, showError);
-                    }
-                    reject(error);
-                    return;
-                }
-                onSuccess(stdout, stderr);
-                if (showSuccess && browserWindow) {
-                    showNotification(browserWindow, showSuccess);
-                }
-                resolve({ stdout, stderr });
-            });
-        } else {
-            // Commande simple sans guillemets, utiliser exec normalement
-            exec(command, execOptions, (error, stdout, stderr) => {
-                if (error) {
-                    onError(error);
-                    if (showError && browserWindow) {
-                        showNotification(browserWindow, showError);
-                    }
-                    reject(error);
-                    return;
-                }
-                onSuccess(stdout, stderr);
-                if (showSuccess && browserWindow) {
-                    showNotification(browserWindow, showSuccess);
-                }
-                resolve({ stdout, stderr });
-            });
-        }
-    });
-}
-
-/**
- * Compile et téléverse le code Arduino sur la carte
- * @param {string} code - Le code Arduino à compiler et téléverser
- * @param {string} port - Le port série de la carte Arduino
- * @param {BrowserWindow|null} browserWindow - La fenêtre pour afficher les notifications
- * @returns {Promise<void>}
- * @throws {Error} Si la compilation ou le téléversement échoue
- */
-async function compileAndUploadArduino(code, port, browserWindow) {
-    const t = translations.menu;
-    try {
-        // Vérifier et télécharger Arduino CLI si nécessaire
-        const arduinoCliAvailable = await ensureArduinoCli(browserWindow);
-        if (!arduinoCliAvailable) {
-            throw new Error('Arduino CLI n\'est pas disponible');
-        }
-        
-        // S'assurer que le dossier sketch existe
-        const sketchDir = path.dirname(PATHS.sketch);
-        if (!fs.existsSync(sketchDir)) {
-            fs.mkdirSync(sketchDir, { recursive: true });
-        }
-        
-        // Écrire le fichier sketch
-        fs.writeFileSync(PATHS.sketch, code, 'utf8');
-
-        // Compiler (le répertoire de travail doit être le parent du dossier sketch)
-        await execCommand(buildArduinoCliCommand(`compile --fqbn arduino:avr:uno sketch`), {
-            browserWindow,
-            showProgress: t.compileCode.notifications.progress,
-            showSuccess: t.compileCode.notifications.success,
-            showError: t.compileCode.notifications.error,
-            onError: (error) => logger.error(`Error compiling code: ${error}`),
-            cwd: directory
-        });
-
-        // Téléverser
-        await execCommand(buildArduinoCliCommand(`upload -p ${port} --fqbn arduino:avr:uno sketch`), {
-            browserWindow,
-            showProgress: t.uploadCode.notifications.progress,
-            showSuccess: t.uploadCode.notifications.success,
-            showError: t.uploadCode.notifications.error,
-            onError: (error) => logger.error(`Error uploading code: ${error}`),
-            cwd: directory
-        });
-    } catch (error) {
-        logger.error('Error in compileAndUploadArduino:', error);
-        throw error;
-    }
-}
-
-// ============================================================================
-// HELPERS POUR LES REMPLACEMENTS DE CHAÎNES
-// ============================================================================
-
-/**
- * Normalise les guillemets Unicode vers des guillemets ASCII
- * @param {string} text - Le texte à normaliser
- * @returns {string} Le texte avec guillemets normalisés
- */
-function normalizeQuotes(text) {
-    return text
-        .replace(/[\u2018\u2019]/g, "'")
-        .replace(/[\u201C\u201D]/g, '"');
-}
-
-/**
- * Normalise les tirets Unicode vers des tirets ASCII
- * @param {string} text - Le texte à normaliser
- * @returns {string} Le texte avec tirets normalisés
- */
-function normalizeDashes(text) {
-    return text
-        .replace(/[\u2013\u2014]/g, '-');
-}
-
-/**
- * Échappe les caractères HTML pour l'affichage sécurisé
- * @param {string} text - Le texte à échapper
- * @returns {string} Le texte échappé
- */
-function escapeHtml(text) {
-    const map = {
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#039;'
-    };
-    return text.replace(/[&<>"']/g, m => map[m]);
 }
 
 // Comparer deux listes d'objets de manière optimisée
@@ -944,152 +389,6 @@ function isMicrobitDrive(drivePath) {
     } catch (e) {
         return false;
     }
-}
-
-/**
- * Vérifie si le code est du MakeCode Python (vs MicroPython standard)
- * @param {string} code - Le code à vérifier
- * @returns {boolean} true si c'est du MakeCode Python, false sinon
- */
-function isMakeCodePython(code) {
-    return MAKECODE_PATTERNS.some(pattern => code.includes(pattern));
-}
-
-/**
- * Normalise les caractères Unicode dans le texte
- * @param {string} text - Le texte à normaliser
- * @param {Object} options - Options de normalisation
- * @param {boolean} options.useNFKC - Utiliser la normalisation NFKC
- * @returns {string} Le texte normalisé
- */
-function normalizeUnicode(text, options = {}) {
-    let normalized = text;
-
-    if (options.useNFKC !== false) {
-        normalized = normalized.normalize('NFKC');
-    }
-
-    // Remplacer les guillemets typographiques
-    normalized = normalized.replace(/[\u2018\u2019\u201C\u201D]/g, '"');
-
-    // Remplacer les tirets typographiques
-    normalized = normalized.replace(/[\u2013\u2014]/g, '-');
-
-    // Supprimer les espaces de largeur zéro
-    if (options.removeZeroWidth !== false) {
-        normalized = normalized.replace(/[\u200B-\u200D\uFEFF]/g, '');
-    }
-
-    // Remplacer les espaces insécables
-    normalized = normalized.replace(/[\u00A0]/g, ' ');
-
-    return normalized;
-}
-
-// Extraire le code depuis l'éditeur Tinkercad
-/**
- * Exécute un script JavaScript dans le webview Tinkercad (si disponible) ou dans la fenêtre principale
- * @param {BrowserWindow} browserWindow - La fenêtre contenant le webview
- * @param {string} script - Le script JavaScript à exécuter
- * @returns {Promise<string>} Le résultat de l'exécution du script
- */
-async function executeScriptInWebview(browserWindow, script) {
-    try {
-        // Utiliser la méthode statique getAllWebContents() pour trouver tous les webContents
-        const allWebContents = webContents.getAllWebContents();
-        
-        // Essayer d'abord dans le webview (si disponible)
-        for (const wc of allWebContents) {
-            try {
-                const url = wc.getURL();
-                if (url && url.includes('tinkercad.com')) {
-                    // Attendre que le DOM soit prêt
-                    await wc.executeJavaScript(`
-                        new Promise((resolve) => {
-                            if (document.readyState === 'complete') {
-                                resolve();
-                            } else {
-                                window.addEventListener('load', () => resolve(), { once: true });
-                                setTimeout(() => resolve(), 1000);
-                            }
-                        })
-                    `);
-                    
-                    const result = await wc.executeJavaScript(script);
-                    if (result && result !== CONSTANTS.EMPTY_CODE) {
-                        return result;
-                    }
-                }
-            } catch (e) {
-                // Continuer avec le prochain webContents
-            }
-        }
-        
-        // Si pas trouvé dans le webview, essayer dans la fenêtre principale
-        return await browserWindow.webContents.executeJavaScript(script);
-    } catch (e) {
-        logger.error('Error executing script:', e.message);
-        return CONSTANTS.EMPTY_CODE;
-    }
-}
-
-/**
- * Extrait le code depuis l'éditeur CodeMirror dans la fenêtre du navigateur
- * @param {BrowserWindow} browserWindow - La fenêtre contenant l'éditeur
- * @param {Object} options - Options d'extraction
- * @param {boolean} options.useAdvancedSelectors - Utiliser des sélecteurs avancés pour trouver l'éditeur
- * @param {boolean} options.normalizeUnicode - Normaliser les caractères Unicode
- * @returns {Promise<string>} Le code extrait ou CONSTANTS.EMPTY_CODE si aucun code trouvé
- */
-async function extractCodeFromEditor(browserWindow, options = {}) {
-    const {
-        useAdvancedSelectors = true, // Activer par défaut pour une meilleure détection
-        normalizeUnicode: shouldNormalize = true
-    } = options;
-
-    try {
-        // Utiliser le script d'extraction amélioré
-        const code = await executeScriptInWebview(browserWindow, CODE_EXTRACTION_SCRIPT);
-
-        if (!code || code === CONSTANTS.EMPTY_CODE) {
-            return CONSTANTS.EMPTY_CODE;
-        }
-
-        if (shouldNormalize) {
-            return normalizeUnicode(code, { useNFKC: useAdvancedSelectors });
-        }
-
-        return code;
-    } catch (error) {
-        logger.error('Error extracting code from editor:', error);
-        return CONSTANTS.EMPTY_CODE;
-    }
-}
-
-// Nettoyer le code Python
-/**
- * Nettoie et normalise le code Python
- * @param {string} code - Le code Python à nettoyer
- * @returns {string} Le code nettoyé
- */
-function cleanPythonCode(code) {
-    // Normaliser les fins de ligne
-    let cleaned = code.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-
-    // Normaliser l'indentation et supprimer les espaces en fin de ligne
-    cleaned = cleaned.split('\n')
-        .map(line => line.replace(/\t/g, '    ').replace(/[ \t]+$/g, ''))
-        .join('\n');
-
-    // Réduire les lignes vides multiples
-    cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
-
-    // S'assurer que le code se termine par un saut de ligne
-    if (!cleaned.endsWith('\n')) {
-        cleaned += '\n';
-    }
-
-    return cleaned;
 }
 
 // Charger un fichier HEX (V1 ou V2)
@@ -1142,7 +441,6 @@ let selectedPort = null;
 let boardDetectionInterval;
 let selectedMicrobitDrive = null;
 let microbitDetectionInterval;
-
 let previousBoards = [];
 let previousMicrobitDrives = [];
 
@@ -1154,7 +452,6 @@ let previousMicrobitDrives = [];
  * @throws {Error} Si aucun fichier HEX n'est trouvé
  */
 async function ensureMicroPythonHexes() {
-    const directoryAppAsar = getAppAsarDirectory();
 
     const v1Hex = loadHexFile('v1', directoryAppAsar);
     const v2Hex = loadHexFile('v2', directoryAppAsar);
@@ -1166,617 +463,17 @@ async function ensureMicroPythonHexes() {
     return { v1Hex, v2Hex };
 }
 
-// ============================================================================
-// REGEX COMPILÉES POUR LES CONVERSIONS MAKECODE -> MICROPYTHON
-// ============================================================================
-const REGEX_MAKECODE = {
-    showIcon: /basic\.show_icon\s*\(\s*IconNames\.(\w+)\s*\)/g,
-    clearScreen: /basic\.clear_screen\s*\(\s*\)/g,
-    forever: /basic\.forever\s*\(\s*(\w+)\s*\)/g,
-    buttonPressed: /input\.on_button_pressed\s*\(\s*Button\.([AB])\s*,\s*(\w+)\s*\)/g,
-    analogPitch: /pins\.analog_pitch\s*\(\s*(\w+)\s*,\s*(\w+)\s*\)/,
-    showString: /basic\.show_string\s*\(\s*([^)]+)\s*\)/g,
-    showNumber: /basic\.show_number\s*\(\s*([^)]+)\s*\)/g,
-    show: /basic\.show\s*\(/g,
-    clear: /basic\.clear\s*\(/g,
-    pause: /basic\.pause\s*\(/g,
-    onGesture: /input\.on_gesture\s*\(\s*Gesture\.(\w+)\s*,\s*(\w+)\s*\)/g,
-    buttonIsPressed: /input\.button_is_pressed\s*\(\s*Button\.([AB])\s*\)/g,
-    acceleration: /input\.acceleration\s*\(\s*Dimension\.([XYZ])\s*\)/g,
-    compassHeading: /input\.compass_heading\s*\(\s*\)/g,
-    calibrateCompass: /input\.calibrate_compass\s*\(\s*\)/g,
-    temperature: /input\.temperature\s*\(\s*\)/g,
-    digitalWritePin: /pins\.digital_write_pin\s*\(\s*DigitalPin\.P(\d+)\s*,\s*([^)]+)\s*\)/g,
-    digitalReadPin: /pins\.digital_read_pin\s*\(\s*DigitalPin\.P(\d+)\s*\)/g,
-    analogWritePin: /pins\.analog_write_pin\s*\(\s*AnalogPin\.P(\d+)\s*,\s*([^)]+)\s*\)/g,
-    analogReadPin: /pins\.analog_read_pin\s*\(\s*AnalogPin\.P(\d+)\s*\)/g,
-    playTone: /music\.play_tone\s*\(\s*([^,]+)\s*,\s*([^)]+)\s*\)/g,
-    stopAllSounds: /music\.stop_all_sounds\s*\(\s*\)/g,
-    sendString: /radio\.send_string\s*\(\s*([^)]+)\s*\)/g,
-    receiveString: /radio\.receive_string\s*\(\s*\)/g,
-    setGroup: /radio\.set_group\s*\(\s*([^)]+)\s*\)/g,
-    onLogoEvent: /input\.on_logo_event\s*\(\s*TouchButtonEvent\.(\w+)\s*,\s*(\w+)\s*\)/g,
-    importMicrobit: /^(from microbit import \*)/m
-};
-
-// ============================================================================
-// SOUS-FONCTIONS POUR LA CONVERSION MAKECODE -> MICROPYTHON
-// ============================================================================
-
-/**
- * Normalise l'indentation du code (remplace les tabs par 4 espaces)
- * @param {string} code - Le code à normaliser
- * @returns {string} Le code avec indentation normalisée
- */
-function normalizeCodeIndentation(code) {
-    const lines = code.split('\n');
-    return lines.map(line => line.replace(/\t/g, '    ')).join('\n');
-}
-
-/**
- * Ajoute les imports MicroPython nécessaires (microbit, music, radio, struct)
- * @param {string} code - Le code auquel ajouter les imports
- * @returns {string} Le code avec les imports ajoutés
- */
-function addMicrobitImports(code) {
-    let converted = code;
-
-    // Ajouter l'import principal si absent
-    if (!converted.includes('from microbit import')) {
-        converted = 'from microbit import *\n\n' + converted;
-    }
-
-    // Ajouter les imports supplémentaires si nécessaires
-    const needsStruct = converted.includes('radio.send_value') || converted.includes('radio.receive_value');
-    const needsMusic = converted.includes('music.') && !converted.includes('import music');
-    const needsRadio = converted.includes('radio.') && !converted.includes('import radio');
-
-    if (needsStruct && !converted.includes('import struct')) {
-        converted = converted.replace(REGEX_MAKECODE.importMicrobit, '$1\nimport struct');
-    }
-    if (needsMusic && !converted.includes('import music')) {
-        converted = converted.replace(REGEX_MAKECODE.importMicrobit, '$1\nimport music');
-    }
-    if (needsRadio && !converted.includes('import radio')) {
-        converted = converted.replace(REGEX_MAKECODE.importMicrobit, '$1\nimport radio');
-    }
-
-    return converted;
-}
-
-/**
- * Convertit les fonctions MakeCode basic.* vers MicroPython display.*
- * @param {string} code - Le code à convertir
- * @param {Object} iconMap - Mappage des icônes MakeCode vers MicroPython
- * @returns {string} Le code converti
- */
-function convertBasicFunctions(code, iconMap) {
-    let converted = code;
-
-    // Convertir basic.show_icon(IconNames.XXX) en display.show(Image.XXX)
-    converted = converted.replace(REGEX_MAKECODE.showIcon, (match, iconName) => {
-        const microPythonIcon = iconMap[iconName] || iconName.toUpperCase();
-        return `display.show(Image.${microPythonIcon})`;
-    });
-
-    // Convertir basic.clear_screen() en display.clear()
-    converted = converted.replace(REGEX_MAKECODE.clearScreen, 'display.clear()');
-
-    // Convertir basic.show_string("text") en display.scroll("text")
-    converted = converted.replace(REGEX_MAKECODE.showString, 'display.scroll($1)');
-
-    // Convertir basic.show_number(num) en display.scroll(str(num))
-    converted = converted.replace(REGEX_MAKECODE.showNumber, 'display.scroll(str($1))');
-
-    // Convertir d'autres fonctions basic.*
-    converted = converted.replace(REGEX_MAKECODE.show, 'display.show(');
-    converted = converted.replace(REGEX_MAKECODE.clear, 'display.clear(');
-    converted = converted.replace(REGEX_MAKECODE.pause, 'sleep(');
-
-    return converted;
-}
-
-/**
- * Convertit les fonctions MakeCode input.* vers MicroPython équivalentes
- * @param {string} code - Le code à convertir
- * @returns {string} Le code converti
- */
-function convertInputFunctions(code) {
-    let converted = code;
-
-    // Convertir input.button_is_pressed(Button.A) en button_a.is_pressed()
-    converted = converted.replace(REGEX_MAKECODE.buttonIsPressed, (match, button) => {
-        const buttonName = button.toLowerCase() === 'a' ? 'button_a' : 'button_b';
-        return `${buttonName}.is_pressed()`;
-    });
-
-    // Convertir input.acceleration(Dimension.X) en accelerometer.get_x()
-    converted = converted.replace(REGEX_MAKECODE.acceleration, (match, dim) => {
-        return `accelerometer.get_${dim.toLowerCase()}()`;
-    });
-
-    // Convertir input.compass_heading() en compass.heading()
-    converted = converted.replace(REGEX_MAKECODE.compassHeading, 'compass.heading()');
-
-    // Convertir input.calibrate_compass() en compass.calibrate()
-    converted = converted.replace(REGEX_MAKECODE.calibrateCompass, 'compass.calibrate()');
-
-    // Convertir input.temperature() en temperature()
-    converted = converted.replace(REGEX_MAKECODE.temperature, 'temperature()');
-
-    return converted;
-}
-
-/**
- * Convertit les fonctions MakeCode pins.* vers MicroPython pinX.*
- * @param {string} code - Le code à convertir
- * @returns {string} Le code converti
- */
-function convertPinFunctions(code) {
-    let converted = code;
-
-    // Convertir pins.digital_write_pin(DigitalPin.P0, 1) en pin0.write_digital(1)
-    converted = converted.replace(REGEX_MAKECODE.digitalWritePin, (match, pin, value) => {
-        return `pin${pin}.write_digital(${value})`;
-    });
-
-    // Convertir pins.digital_read_pin(DigitalPin.P0) en pin0.read_digital()
-    converted = converted.replace(REGEX_MAKECODE.digitalReadPin, (match, pin) => {
-        return `pin${pin}.read_digital()`;
-    });
-
-    // Convertir pins.analog_write_pin(AnalogPin.P0, 512) en pin0.write_analog(512)
-    converted = converted.replace(REGEX_MAKECODE.analogWritePin, (match, pin, value) => {
-        return `pin${pin}.write_analog(${value})`;
-    });
-
-    // Convertir pins.analog_read_pin(AnalogPin.P0) en pin0.read_analog()
-    converted = converted.replace(REGEX_MAKECODE.analogReadPin, (match, pin) => {
-        return `pin${pin}.read_analog()`;
-    });
-
-    return converted;
-}
-
-/**
- * Convertit les fonctions MakeCode music.* et radio.* vers MicroPython
- * @param {string} code - Le code à convertir
- * @returns {string} Le code converti
- */
-function convertMusicAndRadioFunctions(code) {
-    let converted = code;
-
-    // Convertir music.play_tone(freq, duration) en music.pitch(freq, duration)
-    converted = converted.replace(REGEX_MAKECODE.playTone, 'music.pitch($1, $2)');
-
-    // Convertir music.stop_all_sounds() en music.stop()
-    converted = converted.replace(REGEX_MAKECODE.stopAllSounds, 'music.stop()');
-
-    // Convertir radio.send_string("text") en radio.send("text")
-    converted = converted.replace(REGEX_MAKECODE.sendString, 'radio.send($1)');
-
-    // Convertir radio.receive_string() en radio.receive()
-    converted = converted.replace(REGEX_MAKECODE.receiveString, 'radio.receive()');
-
-    // Convertir radio.set_group(1) en radio.config(group=1)
-    converted = converted.replace(REGEX_MAKECODE.setGroup, 'radio.config(group=$1)');
-
-    return converted;
-}
-
-// Convertir pins.analog_pitch (nécessite un traitement spécial pour préserver l'indentation)
-function convertAnalogPitch(code) {
-    if (!REGEX_MAKECODE.analogPitch.test(code)) {
-        return code;
-    }
-
-    const codeLines = code.split('\n');
-    const analogPitchLines = [];
-
-    for (let i = 0; i < codeLines.length; i++) {
-        const line = codeLines[i];
-        const indentMatch = line.match(/^(\s*)/);
-        const indent = indentMatch ? indentMatch[1] : '';
-
-        const analogPitchMatch = line.match(REGEX_MAKECODE.analogPitch);
-        if (analogPitchMatch) {
-            const pin = analogPitchMatch[1];
-            const freq = analogPitchMatch[2];
-            const isPinNumber = /^\d+$/.test(pin);
-            const pinExpr = isPinNumber ? `pin${pin}` : pin;
-            const periodExpr = `int(1000000 / ${freq})`;
-            analogPitchLines.push(`${indent}${pinExpr}.set_analog_period_microseconds(${periodExpr})`);
-            analogPitchLines.push(`${indent}${pinExpr}.write_analog(${PWM_DUTY_CYCLE})`);
-        } else {
-            analogPitchLines.push(line);
-        }
-    }
-
-    return analogPitchLines.join('\n');
-}
-
-// Collecter et convertir les gestionnaires d'événements
-/**
- * Collecte les gestionnaires d'événements MakeCode (on_button_pressed, on_gesture, etc.)
- * et les convertit pour intégration dans une boucle while True
- * @param {string} code - Le code à analyser
- * @returns {{code: string, buttonHandlers: Array, foreverFuncName: string|null}} 
- *          Code nettoyé, gestionnaires collectés et nom de la fonction forever
- */
-function collectEventHandlers(code) {
-    const buttonHandlers = [];
-    const gestureHandlers = [];
-    const logoTouchHandlers = [];
-    let foreverFuncName = null;
-
-    // Collecter basic.forever
-    const foreverMatch = code.match(REGEX_MAKECODE.forever);
-    if (foreverMatch) {
-        foreverFuncName = foreverMatch[1];
-        code = code.replace(REGEX_MAKECODE.forever, '');
-    }
-
-    // Collecter input.on_button_pressed
-    code = code.replace(REGEX_MAKECODE.buttonPressed, (match, button, funcName) => {
-        const buttonName = button.toLowerCase() === 'a' ? 'button_a' : 'button_b';
-        buttonHandlers.push({ button: buttonName, func: funcName });
-        return '';
-    });
-
-    // Collecter input.on_gesture
-    code = code.replace(REGEX_MAKECODE.onGesture, (match, gesture, funcName) => {
-        gestureHandlers.push({ gesture: gesture.toLowerCase(), func: funcName });
-        return '';
-    });
-
-    // Collecter input.on_logo_event
-    code = code.replace(REGEX_MAKECODE.onLogoEvent, (match, event, funcName) => {
-        logoTouchHandlers.push({ func: funcName });
-        return '';
-    });
-
-    // Ajouter les gestionnaires de gestes et logo aux gestionnaires de boutons
-    gestureHandlers.forEach(h => buttonHandlers.push({ button: 'accelerometer', gesture: h.gesture, func: h.func }));
-    logoTouchHandlers.forEach(h => buttonHandlers.push({ button: 'pin_logo', func: h.func }));
-
-    return { code, buttonHandlers, foreverFuncName };
-}
-
-// Intégrer les gestionnaires dans la boucle principale
-/**
- * Intègre les gestionnaires d'événements dans une boucle while True principale
- * @param {string} code - Le code de base
- * @param {Array} buttonHandlers - Liste des gestionnaires de boutons collectés
- * @param {string|null} foreverFuncName - Nom de la fonction forever si présente
- * @returns {string} Le code avec les gestionnaires intégrés dans la boucle principale
- */
-function integrateEventHandlers(code, buttonHandlers, foreverFuncName) {
-    if (buttonHandlers.length === 0 && !foreverFuncName) {
-        return code;
-    }
-
-    const lines = code.split('\n');
-    const newLines = [];
-    let foundMainLoop = false;
-    let mainLoopIndex = -1;
-
-    // Chercher la boucle while True
-    for (let i = 0; i < lines.length; i++) {
-        if (lines[i].includes('while True:') && !foundMainLoop) {
-            foundMainLoop = true;
-            mainLoopIndex = i;
-            break;
-        }
-    }
-
-    if (buttonHandlers.length > 0) {
-        // Reconstruire le code avec les gestionnaires
-        for (let i = 0; i < lines.length; i++) {
-            newLines.push(lines[i]);
-
-            if (i === mainLoopIndex && foundMainLoop) {
-                const nextLine = lines[i + 1] || '';
-                const indentMatch = nextLine.match(/^(\s*)/);
-                const indent = indentMatch && indentMatch[1] ? indentMatch[1] : '    ';
-
-                buttonHandlers.forEach(handler => {
-                    if (handler.gesture) {
-                        newLines.push(`${indent}if accelerometer.was_gesture("${handler.gesture}"):`);
-                        newLines.push(`${indent}    ${handler.func}()`);
-                    } else if (handler.button === 'pin_logo') {
-                        newLines.push(`${indent}if pin_logo.is_touched():`);
-                        newLines.push(`${indent}    ${handler.func}()`);
-                    } else {
-                        newLines.push(`${indent}if ${handler.button}.was_pressed():`);
-                        newLines.push(`${indent}    ${handler.func}()`);
-                    }
-                });
-
-                if (foreverFuncName && code.includes(`def ${foreverFuncName}`)) {
-                    newLines.push(`${indent}${foreverFuncName}()`);
-                }
-            }
-        }
-
-        if (!foundMainLoop) {
-            newLines.push('');
-            newLines.push('while True:');
-            buttonHandlers.forEach(handler => {
-                if (handler.gesture) {
-                    newLines.push(`    if accelerometer.was_gesture("${handler.gesture}"):`);
-                    newLines.push(`        ${handler.func}()`);
-                } else if (handler.button === 'pin_logo') {
-                    newLines.push(`    if pin_logo.is_touched():`);
-                    newLines.push(`        ${handler.func}()`);
-                } else {
-                    newLines.push(`    if ${handler.button}.was_pressed():`);
-                    newLines.push(`        ${handler.func}()`);
-                }
-            });
-            const foreverToCall = foreverFuncName || 'on_forever';
-            if (code.includes(`def ${foreverToCall}`)) {
-                newLines.push(`    ${foreverToCall}()`);
-            }
-            newLines.push('    sleep(10)');
-        }
-
-        code = newLines.join('\n');
-    } else if (foreverFuncName && !code.includes('while True:')) {
-        // Si pas de gestionnaires mais qu'il y a basic.forever, créer la boucle
-        const foreverLines = code.split('\n');
-        const foreverNewLines = [];
-        let foundForeverDef = false;
-
-        for (let i = 0; i < foreverLines.length; i++) {
-            foreverNewLines.push(foreverLines[i]);
-            if (foreverLines[i].includes(`def ${foreverFuncName}`) && !foundForeverDef) {
-                foundForeverDef = true;
-                let j = i + 1;
-                while (j < foreverLines.length && (foreverLines[j].trim() === '' || foreverLines[j].match(/^\s+/))) {
-                    j++;
-                }
-                foreverNewLines.push('');
-                foreverNewLines.push('while True:');
-                foreverNewLines.push(`    ${foreverFuncName}()`);
-                foreverNewLines.push('    sleep(10)');
-            }
-        }
-
-        code = foreverNewLines.join('\n');
-    }
-
-    return code;
-}
-
-// Mapping des icônes MakeCode vers MicroPython
-const ICON_MAP = {
-    'Heart': 'HEART',
-    'SmallHeart': 'HEART_SMALL',
-    'Yes': 'YES',
-    'No': 'NO',
-    'Happy': 'HAPPY',
-    'Sad': 'SAD',
-    'Confused': 'CONFUSED',
-    'Angry': 'ANGRY',
-    'Asleep': 'ASLEEP',
-    'Surprised': 'SURPRISED',
-    'Silly': 'SILLY',
-    'Fabulous': 'FABULOUS',
-    'Meh': 'MEH',
-    'TShirt': 'TSHIRT',
-    'Rollerskate': 'ROLLERSKATE',
-    'Duck': 'DUCK',
-    'House': 'HOUSE',
-    'Tortoise': 'TORTOISE',
-    'Butterfly': 'BUTTERFLY',
-    'StickFigure': 'STICK_FIGURE',
-    'Ghost': 'GHOST',
-    'Sword': 'SWORD',
-    'Giraffe': 'GIRAFFE',
-    'Skull': 'SKULL',
-    'Umbrella': 'UMBRELLA',
-    'Snake': 'SNAKE',
-    'Rabbit': 'RABBIT',
-    'Cow': 'COW',
-    'QuarterNote': 'QUARTER_NOTE',
-    'EigthNote': 'EIGHTH_NOTE',
-    'Pitchfork': 'PITCHFORK',
-    'Tent': 'TENT',
-    'Jagged': 'JAGGED',
-    'Target': 'TARGET',
-    'Triangle': 'TRIANGLE',
-    'LeftTriangle': 'TRIANGLE_LEFT',
-    'Chessboard': 'CHESSBOARD',
-    'Diamond': 'DIAMOND',
-    'SmallDiamond': 'DIAMOND_SMALL',
-    'Square': 'SQUARE',
-    'SmallSquare': 'SQUARE_SMALL',
-    'Scissors': 'SCISSORS',
-    'ArrowNorth': 'ARROW_N',
-    'ArrowNorthEast': 'ARROW_NE',
-    'ArrowEast': 'ARROW_E',
-    'ArrowSouthEast': 'ARROW_SE',
-    'ArrowSouth': 'ARROW_S',
-    'ArrowSouthWest': 'ARROW_SW',
-    'ArrowWest': 'ARROW_W',
-    'ArrowNorthWest': 'ARROW_NW',
-    'MusicNote': 'MUSIC_NOTE',
-    'MusicNoteBeamed': 'MUSIC_NOTE_BEAMED',
-    'MusicalScore': 'MUSICAL_SCORE',
-    'Xmas': 'XMAS',
-    'Pacman': 'PACMAN'
-};
-
-/**
- * Convertit le code MakeCode Python en MicroPython standard
- * 
- * MakeCode utilise: basic.show_icon(IconNames.Heart), basic.forever(on_forever)
- * MicroPython utilise: display.show(Image.HEART), while True: on_forever()
- * 
- * @param {string} code - Le code MakeCode Python à convertir
- * @returns {string} Le code MicroPython converti
- */
-function convertMakeCodeToMicroPython(code) {
-    // Normaliser les fins de ligne et l'indentation
-    let converted = code.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-    converted = normalizeCodeIndentation(converted);
-
-    // Ajouter les imports
-    converted = addMicrobitImports(converted);
-
-    // Convertir les fonctions dans l'ordre
-    converted = convertBasicFunctions(converted, ICON_MAP);
-    converted = convertInputFunctions(converted);
-    converted = convertPinFunctions(converted);
-    converted = convertMusicAndRadioFunctions(converted);
-    converted = convertAnalogPitch(converted);
-
-    // Collecter et convertir les gestionnaires d'événements
-    const { code: codeAfterHandlers, buttonHandlers, foreverFuncName } = collectEventHandlers(converted);
-    converted = codeAfterHandlers;
-
-    // Nettoyer les lignes vides multiples créées par la suppression des gestionnaires
-    converted = converted.replace(/\n{3,}/g, '\n\n');
-
-    // Intégrer les gestionnaires dans la boucle principale
-    converted = integrateEventHandlers(converted, buttonHandlers, foreverFuncName);
-
-    // S'assurer que le code se termine par un saut de ligne
-    if (!converted.endsWith('\n')) {
-        converted += '\n';
-    }
-
-
-    return converted;
-}
-
-/**
- * Valide la syntaxe Python et affiche les erreurs si nécessaire
- * @param {string} code - Le code Python à valider
- * @param {BrowserWindow|null} browserWindow - La fenêtre pour afficher les erreurs
- * @returns {Array} Tableau d'erreurs détectées
- */
-function validatePythonSyntaxWithDisplay(code, browserWindow = null) {
-    const errors = validatePythonSyntax(code);
-    if (errors.length > 0 && browserWindow) {
-        const t = translations.menu;
-        const errorLines = errors.map(e =>
-            (t.microbit.convertedCode.errorLine || 'Ligne {line}: {message}')
-                .replace('{line}', e.line)
-                .replace('{message}', e.message)
-        ).join('\n');
-        const errorMsg = (t.microbit.convertedCode.validationErrors || 'Erreurs détectées dans le code converti:\n\n{errors}')
-            .replace('{errors}', errorLines);
-        showNotification(browserWindow, errorMsg);
-    }
-    return errors;
-}
-
-/**
- * Valide la syntaxe Python de base (détection d'erreurs courantes)
- * @param {string} code - Le code Python à valider
- * @returns {Array<{line: number, message: string}>} Tableau d'erreurs détectées
- */
-function validatePythonSyntax(code) {
-    const errors = [];
-    const lines = code.split('\n');
-
-    // Vérifier les parenthèses, crochets et accolades équilibrés
-    let parenCount = 0;
-    let bracketCount = 0;
-    let braceCount = 0;
-
-    for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        const lineNum = i + 1;
-
-        // Compter les parenthèses, crochets et accolades
-        for (const char of line) {
-            if (char === '(') parenCount++;
-            else if (char === ')') parenCount--;
-            else if (char === '[') bracketCount++;
-            else if (char === ']') bracketCount--;
-            else if (char === '{') braceCount++;
-            else if (char === '}') braceCount--;
-        }
-
-        // Vérifier les erreurs d'indentation (lignes qui commencent après un : sans indentation)
-        if (i > 0) {
-            const prevLine = lines[i - 1].trim();
-            const currentLine = line.trim();
-
-            // Si la ligne précédente se termine par : et la ligne actuelle n'est pas vide
-            if (prevLine.endsWith(':') && currentLine && !currentLine.startsWith('#') && !currentLine.startsWith('def ') && !currentLine.startsWith('class ')) {
-                // Vérifier que la ligne actuelle est indentée
-                const indentMatch = line.match(/^(\s*)/);
-                const indent = indentMatch ? indentMatch[1] : '';
-                if (indent.length === 0 && currentLine.length > 0) {
-                    errors.push({
-                        line: lineNum,
-                        message: t.microbit.validation.indentationError || 'Erreur d\'indentation: ligne attendue après ":"'
-                    });
-                }
-            }
-        }
-
-        // Vérifier les guillemets non fermés
-        const singleQuotes = (line.match(/'/g) || []).length;
-        const doubleQuotes = (line.match(/"/g) || []).length;
-        if (singleQuotes % 2 !== 0 && !line.includes("'")) {
-            // Ignorer les cas où c'est dans une chaîne multi-lignes
-        }
-    }
-
-    // Vérifier les parenthèses/crochets/accolades non fermés
-    if (parenCount !== 0) {
-        errors.push({
-            line: lines.length,
-            message: (t.microbit.validation.unbalancedParentheses || 'Parenthèses non équilibrées ({count})').replace('{count}', `${parenCount > 0 ? '+' : ''}${parenCount}`)
-        });
-    }
-    if (bracketCount !== 0) {
-        errors.push({
-            line: lines.length,
-            message: (t.microbit.validation.unbalancedBrackets || 'Crochets non équilibrés ({count})').replace('{count}', `${bracketCount > 0 ? '+' : ''}${bracketCount}`)
-        });
-    }
-    if (braceCount !== 0) {
-        errors.push({
-            line: lines.length,
-            message: (t.microbit.validation.unbalancedBraces || 'Accolades non équilibrées ({count})').replace('{count}', `${braceCount > 0 ? '+' : ''}${braceCount}`)
-        });
-    }
-
-    // Vérifier les imports manquants pour les fonctions utilisées
-    const hasMusic = code.includes('music.') && !code.includes('import music') && !code.includes('from microbit import');
-    const hasRadio = code.includes('radio.') && !code.includes('import radio') && !code.includes('from microbit import');
-
-    if (hasMusic) {
-        errors.push({
-            line: 1,
-            message: t.microbit.validation.missingImportMusic || 'Import manquant: ajoutez "import music" ou "from microbit import *"'
-        });
-    }
-    if (hasRadio) {
-        errors.push({
-            line: 1,
-            message: t.microbit.validation.missingImportRadio || 'Import manquant: ajoutez "import radio" ou "from microbit import *"'
-        });
-    }
-
-    return errors;
-}
-
 // Afficher le code MicroPython converti dans une fenêtre
 /**
  * Affiche une fenêtre avec le code MicroPython converti
  * @param {string} code - Le code MicroPython à afficher
  */
 function showConvertedCodeWindow(code) {
+    const t = translations?.menu || {};
     const codeWindow = new BrowserWindow({
         width: 900,
         height: 700,
-        title: t.microbit.convertedCode.title || 'Code MicroPython Converti',
+        title: t.microbit?.convertedCode?.title || 'Code MicroPython Converti',
         autoHideMenuBar: true,
         webPreferences: {
             nodeIntegration: false,
@@ -1787,11 +484,11 @@ function showConvertedCodeWindow(code) {
     // Masquer complètement la barre de menu
     codeWindow.setMenuBarVisibility(false);
 
-    const title = t.microbit.convertedCode.title || 'Code MicroPython Converti';
-    const description = t.microbit.convertedCode.description || 'Ce code a été automatiquement converti depuis MakeCode Python vers MicroPython standard';
-    const copyButton = t.microbit.convertedCode.copyButton || 'Copier le code';
-    const closeButton = t.microbit.convertedCode.closeButton || 'Fermer';
-    const copySuccess = t.microbit.convertedCode.copySuccess || 'Code copié dans le presse-papiers !';
+    const title = t.microbit?.convertedCode?.title || 'Code MicroPython Converti';
+    const description = t.microbit?.convertedCode?.description || 'Ce code a été automatiquement converti depuis MakeCode Python vers MicroPython standard';
+    const copyButton = t.microbit?.convertedCode?.copyButton || 'Copier le code';
+    const closeButton = t.microbit?.convertedCode?.closeButton || 'Fermer';
+    const copySuccess = t.microbit?.convertedCode?.copySuccess || 'Code copié dans le presse-papiers !';
 
     const html = `
 <!DOCTYPE html>
@@ -1917,7 +614,7 @@ function showConvertedCodeWindow(code) {
             navigator.clipboard.writeText(code).then(() => {
                 alert('${copySuccess}');
             }).catch(err => {
-                logger.error('Erreur lors de la copie:', err);
+                console.error('Erreur lors de la copie:', err);
             });
         }
         
@@ -1970,8 +667,8 @@ async function compilePythonToHex(code) {
         return hexContent;
     } catch (err) {
         logger.error('Error compiling Python to HEX:', err && err.stack ? err.stack : err);
-        const errMsg = (err && err.message) ? err.message : (err && err.toString) ? err.toString() : 'Erreur inconnue';
-        throw new Error('Erreur lors de la compilation: ' + errMsg);
+        const errMsg = (err && err.message) ? err.message : (err && err.toString) ? err.toString() : translations.menu?.errors?.unknownError || 'Erreur inconnue';
+        throw new Error((translations.menu?.errors?.compileErrorPrefix || 'Erreur lors de la compilation: ') + errMsg);
     }
 }
 
@@ -1983,7 +680,7 @@ async function compilePythonToHex(code) {
 function listMicrobitDrives(browserWindow) {
     const drives = [];
 
-    if (process.platform === 'win32') {
+    if (isWindows) {
         // Windows : lister tous les lecteurs et vérifier la présence de DETAILS.TXT
         exec('wmic logicaldisk get Name', (error, stdout) => {
             if (error) {
@@ -2040,7 +737,7 @@ function listMicrobitDrives(browserWindow) {
 
             updateMicrobitDrivesList(drives, browserWindow);
         });
-    } else if (process.platform === 'linux') {
+    } else if (!isMac) {
         // Linux : chercher dans /media et /mnt
         exec('lsblk -n -o MOUNTPOINT', (error, stdout) => {
             if (error) {
@@ -2068,7 +765,7 @@ function listMicrobitDrives(browserWindow) {
 
             updateMicrobitDrivesList(drives, browserWindow);
         });
-    } else if (process.platform === 'darwin') {
+    } else if (isMac) {
         // macOS : chercher dans /Volumes
         try {
             const volumesDir = '/Volumes';
@@ -2100,12 +797,12 @@ function listMicrobitDrives(browserWindow) {
 function updateMicrobitDrivesList(drives, browserWindow) {
     const hasChanges = !areListsEqual(drives, previousMicrobitDrives);
 
-    // Mettre à jour la liste même si pas de changement détecté (pour forcer le refresh)
     previousMicrobitDrives = drives;
 
-    // Toujours rafraîchir le menu pour s'assurer qu'il est à jour
-    refreshMenu();
-    updateBoardStatusIcons();
+    if (hasChanges) {
+        refreshMenu();
+        updateBoardStatusIcons();
+    }
 
     if (hasChanges && browserWindow) {
         if (drives.length === 0) {
@@ -2119,668 +816,95 @@ function updateMicrobitDrivesList(drives, browserWindow) {
     }
 }
 
-// Télécharger un fichier depuis une URL
 /**
- * Télécharge un fichier depuis une URL vers un chemin local
- * @param {string} url - L'URL du fichier à télécharger
- * @param {string} destPath - Le chemin de destination local
+ * Flux unifié : extraire le code → compiler → téléverser sur Arduino
+ * @param {BrowserWindow|null} browserWindow - Fenêtre pour les notifications
  * @returns {Promise<void>}
- * @throws {Error} Si le téléchargement échoue
  */
-async function downloadToFile(url, destPath) {
-    return new Promise((resolve, reject) => {
-        const download = (currentUrl, redirectCount = 0) => {
-            if (redirectCount > 5) {
-                reject(new Error('Too many redirects'));
+function runArduinoUploadFlow(browserWindow) {
+    const t = translations.menu;
+    if (!browserWindow) return Promise.resolve();
+    if (!selectedPort) {
+        showNotification(browserWindow, t.uploadCode.notifications.noPort);
+        return Promise.resolve();
+    }
+    const portExists = previousBoards.some(board => board.port === selectedPort);
+    if (!portExists) {
+        showNotification(browserWindow, t.uploadCode.notifications.falsePort);
+        return Promise.resolve();
+    }
+    return extractCodeFromEditor(browserWindow)
+        .then(code => {
+            if (code === CONSTANTS.EMPTY_CODE) {
+                showNotification(browserWindow, t.copyCode.notifications.empty);
                 return;
             }
-
-            // Détecter le protocole (http ou https)
-            const urlObj = new URL(currentUrl);
-            const httpModule = urlObj.protocol === 'https:' ? require('https') : require('http');
-
-        const file = fs.createWriteStream(destPath);
-        file.on('error', err => {
-                safeExecute(() => fs.unlinkSync(destPath));
-            reject(err);
+            return compileAndUploadArduino(code, selectedPort, browserWindow, translations.menu).catch(error => {
+                logger.error('Error in Arduino upload process:', error);
+                const errorMsg = error && error.message ? error.message : translations.menu?.errors?.unknownErrorUpload || 'Erreur inconnue lors de la compilation/téléversement';
+                showNotification(browserWindow, t.uploadCode.notifications.error + '\n' + errorMsg);
+            });
+        })
+        .catch(error => {
+            logger.error('Error extracting code:', error);
+            showNotification(browserWindow, t.copyCode.notifications.error);
         });
+}
 
-            httpModule.get(currentUrl, res => {
-                // Suivre les redirections (301, 302, 307, 308)
-                if (res.statusCode === 301 || res.statusCode === 302 || res.statusCode === 307 || res.statusCode === 308) {
-                    safeExecute(() => file.close());
-                    safeExecute(() => fs.unlinkSync(destPath));
-                    const location = res.headers.location;
-                    if (location) {
-                        // Gérer les redirections absolues et relatives
-                        const redirectUrl = location.startsWith('http') ? location : new URL(location, currentUrl).toString();
-                        download(redirectUrl, redirectCount + 1);
-                    } else {
-                        reject(new Error('HTTP ' + res.statusCode + ' - No location header'));
-                    }
-                    return;
-                }
-
-            if (res.statusCode !== 200) {
-                    safeExecute(() => file.close());
-                    safeExecute(() => fs.unlinkSync(destPath));
-                reject(new Error('HTTP ' + res.statusCode));
+/**
+ * Flux unifié : extraire le code → nettoyer/convertir → compiler en HEX → écrire sur micro:bit
+ * @param {BrowserWindow|null} browserWindow - Fenêtre pour les notifications
+ * @returns {Promise<void>}
+ */
+function runMicrobitUploadFlow(browserWindow) {
+    const t = translations.menu;
+    if (!browserWindow) return Promise.resolve();
+    if (!selectedMicrobitDrive) {
+        showNotification(browserWindow, t.microbit.notifications.noDrive || 'Aucune micro:bit sélectionnée');
+        return Promise.resolve();
+    }
+    return extractCodeFromEditor(browserWindow, { useAdvancedSelectors: true })
+        .then(code => {
+            if (code === CONSTANTS.EMPTY_CODE) {
+                showNotification(browserWindow, t.copyCode.notifications.empty);
                 return;
             }
-
-            res.pipe(file);
-            file.on('finish', () => file.close(() => resolve()));
-        }).on('error', err => {
-                safeExecute(() => file.close());
-                safeExecute(() => fs.unlinkSync(destPath));
-            reject(err);
-        });
-        };
-
-        download(url);
-    });
-}
-
-/**
- * Rend un fichier exécutable (Linux/macOS uniquement)
- * @param {string} filePath - Le chemin du fichier à rendre exécutable
- */
-function makeExecutable(filePath) {
-    if (process.platform !== 'win32') {
-        try {
-            // Utiliser fs.chmodSync pour définir les permissions d'exécution (0o755)
-            fs.chmodSync(filePath, 0o755);
-        } catch (error) {
-            logger.warn(`Failed to make ${filePath} executable:`, error.message);
-            // Essayer avec exec comme fallback
-            try {
-                execSync(`chmod +x "${filePath}"`);
-    } catch (e) {
-                logger.error(`Both methods failed to make ${filePath} executable:`, e.message);
+            let cleanedCode = cleanPythonCode(code);
+            showNotification(browserWindow, t.compileCode.notifications.progress || 'Compilation en cours...');
+            let microPythonCode = cleanedCode;
+            if (isMakeCodePython(cleanedCode)) {
+                microPythonCode = convertMakeCodeToMicroPython(cleanedCode);
+            } else if (!microPythonCode.includes('from microbit import')) {
+                microPythonCode = 'from microbit import *\n\n' + microPythonCode;
             }
-        }
-    }
-}
-
-/**
- * Crée le fichier de configuration Arduino CLI par défaut s'il n'existe pas
- * @param {string} configPath - Le chemin du fichier de configuration à créer
- */
-function ensureArduinoCliConfig(configPath) {
-    if (!fs.existsSync(configPath)) {
-        try {
-            // Créer le répertoire parent s'il n'existe pas (compatible multi-OS)
-            const configDir = path.dirname(configPath);
-            if (!fs.existsSync(configDir)) {
-                fs.mkdirSync(configDir, { recursive: true });
-            }
-            
-            const defaultConfig = `board_manager:
-  additional_urls:
-    - https://arduino.esp8266.com/stable/package_esp8266com_index.json
-    - https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json
-    - https://sandeepmistry.github.io/arduino-nRF5/package_nRF5_boards_index.json
-daemon:
-  port: "50051"
-directories:
-  data: ./data
-  downloads: ./suppr
-  user: ./sketchbook
-logging:
-  file: ""
-  format: text
-  level: info
-`;
-            // Écrire le fichier avec encodage UTF-8 (compatible multi-OS)
-            fs.writeFileSync(configPath, defaultConfig, 'utf8');
-            logger.info(`Created default Arduino CLI configuration file: ${configPath}`);
-        } catch (error) {
-            logger.error(`Failed to create Arduino CLI configuration file: ${error.message}`);
-        }
-    }
-}
-
-/**
- * Récupère la dernière version de l'application depuis GitHub (releases)
- * @returns {Promise<string|null>} Le numéro de version (ex: "1.2.5") ou null en cas d'erreur
- */
-function getAppRepositorySlug() {
-    try {
-        const pkg = require('./package.json');
-        const repo = pkg.repository;
-        if (!repo) return null;
-        if (typeof repo === 'string') {
-            const m = repo.match(/github:([^/]+\/[^/]+?)(?:\s|$)/) || repo.match(/^([^/]+\/[^/]+)$/);
-            return m ? m[1].replace(/\.git$/, '') : null;
-        }
-        if (repo.url) {
-            const m = repo.url.match(/github\.com[/:]([^/]+\/[^/]+?)(?:\.git)?$/);
-            return m ? m[1] : null;
-        }
-        return null;
-    } catch (e) {
-        return null;
-    }
-}
-
-async function getLatestAppReleaseVersion() {
-    const slug = getAppRepositorySlug();
-    if (!slug) return null;
-    return new Promise((resolve) => {
-        const options = {
-            hostname: 'api.github.com',
-            path: `/repos/${slug}/releases/latest`,
-            method: 'GET',
-            headers: {
-                'User-Agent': 'Tinkercad-QHL',
-                'Accept': 'application/vnd.github.v3+json'
-            }
-        };
-        https.get(options, (res) => {
-            let data = '';
-            res.on('data', (chunk) => { data += chunk; });
-            res.on('end', () => {
-                try {
-                    const release = JSON.parse(data);
-                    const version = release.tag_name ? release.tag_name.replace(/^v/, '') : null;
-                    resolve(version);
-                } catch (error) {
-                    logger.error('Failed to parse app release response:', error.message);
-                    resolve(null);
-                }
-            });
-        }).on('error', (error) => {
-            logger.error('Failed to fetch latest app version:', error.message);
-            resolve(null);
-        });
-    });
-}
-
-/**
- * Vérifie s'il existe une mise à jour et affiche une notification
- * @param {BrowserWindow|null} browserWindow
- */
-async function checkForUpdates(browserWindow) {
-    const t = translations.menu.help;
-    if (!browserWindow) browserWindow = getMainWindow();
-    if (browserWindow) showNotification(browserWindow, t.checkUpdateChecking);
-    const currentVersion = require('./package.json').version;
-    const latestVersion = await getLatestAppReleaseVersion();
-    if (!browserWindow) return;
-    if (!latestVersion) {
-        showNotification(browserWindow, t.checkUpdateError);
-        return;
-    }
-    const compare = compareVersions(currentVersion, latestVersion);
-    if (compare >= 0) {
-        showNotification(browserWindow, t.checkUpdateCurrent.replace('{version}', currentVersion));
-    } else {
-        showNotification(browserWindow, t.checkUpdateAvailable.replace('{version}', latestVersion));
-    }
-}
-
-/**
- * Compare deux versions sémantiques (ex: "1.2.0" vs "1.2.5")
- * @returns {number} &lt; 0 si a &lt; b, 0 si égales, &gt; 0 si a &gt; b
- */
-function compareVersions(a, b) {
-    const pa = a.split('.').map(Number);
-    const pb = b.split('.').map(Number);
-    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-        const na = pa[i] || 0;
-        const nb = pb[i] || 0;
-        if (na !== nb) return na - nb;
-    }
-    return 0;
-}
-
-/**
- * Récupère la dernière version d'Arduino CLI depuis l'API GitHub
- * @returns {Promise<string|null>} Le numéro de version (ex: "1.4.1") ou null en cas d'erreur
- */
-async function getLatestArduinoCliVersion() {
-    return new Promise((resolve) => {
-        const options = {
-            hostname: 'api.github.com',
-            path: '/repos/arduino/arduino-cli/releases/latest',
-            method: 'GET',
-            headers: {
-                'User-Agent': 'Tinkercad-QHL',
-                'Accept': 'application/vnd.github.v3+json'
-            }
-        };
-
-        https.get(options, (res) => {
-            let data = '';
-            res.on('data', (chunk) => {
-                data += chunk;
-            });
-            res.on('end', () => {
-                try {
-                    const release = JSON.parse(data);
-                    // Extraire le numéro de version du tag (ex: "v1.4.1" -> "1.4.1")
-                    const version = release.tag_name ? release.tag_name.replace(/^v/, '') : null;
-                    resolve(version);
-                } catch (error) {
-                    logger.error('Failed to parse GitHub API response:', error.message);
-                    resolve(null);
-                }
-            });
-        }).on('error', (error) => {
-            logger.error('Failed to fetch latest Arduino CLI version:', error.message);
-            resolve(null);
-        });
-    });
-}
-
-/**
- * Récupère l'URL de téléchargement du fichier HEX micro:bit v1 depuis l'API GitHub
- * @returns {Promise<string|null>} L'URL de téléchargement ou null en cas d'erreur
- */
-async function getMicrobitV1HexUrl() {
-    return new Promise((resolve) => {
-        const options = {
-            hostname: 'api.github.com',
-            path: '/repos/bbcmicrobit/micropython/releases/latest',
-            method: 'GET',
-            headers: {
-                'User-Agent': 'Tinkercad-QHL',
-                'Accept': 'application/vnd.github.v3+json'
-            }
-        };
-
-        https.get(options, (res) => {
-            let data = '';
-            res.on('data', (chunk) => {
-                data += chunk;
-            });
-            res.on('end', () => {
-                try {
-                    const release = JSON.parse(data);
-                    // Chercher l'asset avec "firmware.hex" ou "MICROBIT_V1.hex"
-                    const asset = release.assets?.find(a => 
-                        a.name.includes('firmware.hex') || 
-                        a.name.includes('MICROBIT_V1.hex') ||
-                        a.name.endsWith('.hex')
-                    );
-                    resolve(asset ? asset.browser_download_url : null);
-                } catch (error) {
-                    logger.error('Failed to parse GitHub API response for micro:bit v1:', error.message);
-                    resolve(null);
-                }
-            });
-        }).on('error', (error) => {
-            logger.error('Failed to fetch micro:bit v1 HEX URL:', error.message);
-            resolve(null);
-        });
-    });
-}
-
-/**
- * Récupère l'URL de téléchargement du fichier HEX micro:bit v2 depuis l'API GitHub
- * @returns {Promise<string|null>} L'URL de téléchargement ou null en cas d'erreur
- */
-async function getMicrobitV2HexUrl() {
-    return new Promise((resolve) => {
-        const options = {
-            hostname: 'api.github.com',
-            path: '/repos/microbit-foundation/micropython-microbit-v2/releases/latest',
-            method: 'GET',
-            headers: {
-                'User-Agent': 'Tinkercad-QHL',
-                'Accept': 'application/vnd.github.v3+json'
-            }
-        };
-
-        https.get(options, (res) => {
-            let data = '';
-            res.on('data', (chunk) => {
-                data += chunk;
-            });
-            res.on('end', () => {
-                try {
-                    const release = JSON.parse(data);
-                    // Chercher l'asset avec "MICROBIT.hex"
-                    const asset = release.assets?.find(a => 
-                        a.name.includes('MICROBIT.hex') ||
-                        (a.name.endsWith('.hex') && !a.name.includes('V1'))
-                    );
-                    resolve(asset ? asset.browser_download_url : null);
-                } catch (error) {
-                    logger.error('Failed to parse GitHub API response for micro:bit v2:', error.message);
-                    resolve(null);
-                }
-            });
-        }).on('error', (error) => {
-            logger.error('Failed to fetch micro:bit v2 HEX URL:', error.message);
-            resolve(null);
-        });
-    });
-}
-
-/**
- * Construit l'URL de téléchargement d'Arduino CLI avec la version spécifiée
- * @param {string} version - Le numéro de version (ex: "1.4.1")
- * @returns {string|null} L'URL de téléchargement ou null si la plateforme n'est pas supportée
- */
-function buildArduinoCliDownloadUrl(version) {
-    const platform = process.platform;
-    let filename;
-    
-    if (platform === 'win32') {
-        filename = `arduino-cli_${version}_Windows_64bit.zip`;
-    } else if (platform === 'darwin') {
-        filename = `arduino-cli_${version}_macOS_64bit.tar.gz`;
-    } else {
-        // Linux
-        filename = `arduino-cli_${version}_Linux_64bit.tar.gz`;
-    }
-    
-    return `https://github.com/arduino/arduino-cli/releases/download/v${version}/${filename}`;
-}
-
-/**
- * Vérifie et télécharge Arduino CLI si nécessaire
- * @param {BrowserWindow|null} browserWindow - La fenêtre pour afficher les notifications
- * @param {boolean} autoDownload - Si true, télécharge automatiquement si absent (défaut: true)
- * @returns {Promise<boolean>} true si Arduino CLI est disponible, false sinon
- */
-async function ensureArduinoCli(browserWindow, autoDownload = true) {
-    logger.info('[DEBUG] ========================================');
-    logger.info('[DEBUG] ensureArduinoCli called');
-    logger.info(`[DEBUG] autoDownload: ${autoDownload}`);
-    logger.info(`[DEBUG] browserWindow: ${browserWindow ? 'present' : 'null'}`);
-    
-    try {
-        const arduinoCliPath = PATHS.arduinoCli;
-        const arduinoDir = path.dirname(arduinoCliPath);
-        const configPath = PATHS.arduinoConfig;
-        
-        logger.info(`[DEBUG] arduinoCliPath: ${arduinoCliPath}`);
-        logger.info(`[DEBUG] arduinoDir: ${arduinoDir}`);
-        logger.info(`[DEBUG] configPath: ${configPath}`);
-        
-        // Vérifier si Arduino CLI existe déjà
-        logger.info('[DEBUG] Checking if Arduino CLI already exists...');
-        if (fs.existsSync(arduinoCliPath)) {
-            logger.info('[DEBUG] Arduino CLI already exists, skipping download');
-            // Vérifier et créer le fichier de configuration s'il n'existe pas
-            ensureArduinoCliConfig(configPath);
-            
-            // Vérifier les permissions sur Linux/macOS
-            if (process.platform !== 'win32') {
-                try {
-                    const stats = fs.statSync(arduinoCliPath);
-                    // Vérifier si le fichier est exécutable (mode & 0o111)
-                    if ((stats.mode & 0o111) === 0) {
-                        logger.info('Arduino CLI exists but is not executable, fixing permissions...');
-                        makeExecutable(arduinoCliPath);
-                    }
-                } catch (error) {
-                    logger.warn('Could not check Arduino CLI permissions:', error.message);
-                }
-            }
-            return true;
-        }
-        
-        // Si autoDownload est false, ne pas télécharger, juste retourner false
-        if (!autoDownload) {
-            return false;
-        }
-        
-        // Créer le répertoire si nécessaire
-        if (!fs.existsSync(arduinoDir)) {
-            fs.mkdirSync(arduinoDir, { recursive: true });
-        }
-        
-        // Récupérer la dernière version depuis l'API GitHub
-        logger.info('[DEBUG] Fetching latest Arduino CLI version from GitHub...');
-        if (browserWindow) {
-            showNotification(browserWindow, 'Vérification de la dernière version d\'Arduino CLI...');
-        }
-        const latestVersion = await getLatestArduinoCliVersion();
-        logger.info(`[DEBUG] Latest version: ${latestVersion}`);
-        
-        if (!latestVersion) {
-            logger.error('Failed to get latest Arduino CLI version from GitHub');
-            if (browserWindow) {
-                showNotification(browserWindow, 'Erreur : impossible de récupérer la dernière version d\'Arduino CLI');
-            }
-            return false;
-        }
-        
-        // Construire l'URL de téléchargement avec la version réelle
-        const downloadUrl = buildArduinoCliDownloadUrl(latestVersion);
-        const isArchive = true; // Toutes les plateformes utilisent des archives
-        
-        if (!downloadUrl) {
-            logger.error('No download URL for Arduino CLI on this platform');
-            if (browserWindow) {
-                showNotification(browserWindow, 'Erreur : plateforme non supportée pour Arduino CLI');
-            }
-            return false;
-        }
-        
-        logger.info(`Downloading Arduino CLI version ${latestVersion} from ${downloadUrl}`);
-        
-        try {
-            if (browserWindow) {
-                showNotification(browserWindow, 'Téléchargement d\'Arduino CLI en cours...');
-            }
-        
-            if (isArchive) {
-                // Pour les archives, on télécharge dans un fichier temporaire
-                const isWindows = process.platform === 'win32';
-                const archiveExt = isWindows ? '.zip' : '.tar.gz';
-                const tempArchive = path.join(arduinoDir, `arduino-cli_temp${archiveExt}`);
-                
-                logger.info('[DEBUG] Starting archive extraction process');
-                logger.info(`[DEBUG] Platform: ${process.platform}`);
-                logger.info(`[DEBUG] Archive path: ${tempArchive}`);
-                logger.info(`[DEBUG] Arduino directory: ${arduinoDir}`);
-                logger.info(`[DEBUG] Arduino CLI expected path: ${arduinoCliPath}`);
-                
-                await downloadToFile(downloadUrl, tempArchive);
-                
-                logger.info('[DEBUG] Archive downloaded, checking if file exists...');
-                if (!fs.existsSync(tempArchive)) {
-                    logger.error(`[DEBUG] Archive file does not exist after download: ${tempArchive}`);
-                    if (browserWindow) {
-                        showNotification(browserWindow, 'Erreur : archive introuvable après téléchargement');
-                    }
-                    return false;
-                }
-                
-                const archiveStats = fs.statSync(tempArchive);
-                logger.info(`[DEBUG] Archive file exists, size: ${archiveStats.size} bytes`);
-                
-                // Extraire l'archive selon la plateforme
-                try {
-                    logger.info('[DEBUG] Starting extraction...');
-                    await new Promise((resolve, reject) => {
-                        if (isWindows) {
-                            // Windows : utiliser PowerShell pour extraire le ZIP
-                            const psScript = `Expand-Archive -Path "${tempArchive}" -DestinationPath "${arduinoDir}" -Force`;
-                            const command = `powershell.exe -NoProfile -ExecutionPolicy Bypass -Command "${psScript}"`;
-                            
-                            logger.info(`[DEBUG] Windows detected, using PowerShell`);
-                            logger.info(`[DEBUG] PowerShell script: ${psScript}`);
-                            logger.info(`[DEBUG] Full command: ${command}`);
-                            logger.info(`[DEBUG] About to execute: exec("${command}")`);
-                            
-                            const startTime = Date.now();
-                            exec(command, (error, stdout, stderr) => {
-                                const duration = Date.now() - startTime;
-                                logger.info(`[DEBUG] PowerShell command completed in ${duration}ms`);
-                                
-                                if (stdout) {
-                                    logger.info(`[DEBUG] PowerShell stdout: ${stdout}`);
-                                }
-                                if (stderr) {
-                                    logger.warn(`[DEBUG] PowerShell stderr: ${stderr}`);
-                                }
-                                
-                                if (error) {
-                                    logger.error(`[DEBUG] PowerShell error occurred:`);
-                                    logger.error(`[DEBUG] Error code: ${error.code}`);
-                                    logger.error(`[DEBUG] Error signal: ${error.signal}`);
-                                    logger.error(`[DEBUG] Error message: ${error.message}`);
-                                    logger.error(`[DEBUG] Error stack: ${error.stack}`);
-                                    
-                                    // Afficher l'erreur dans une notification pour la version compilée
-                                    if (browserWindow) {
-                                        const errorMsg = error.message || error.code || 'Erreur inconnue';
-                                        showNotification(browserWindow, `Erreur PowerShell: ${errorMsg}\n\nLogs détaillés dans:\n${logFile}`);
-                                    }
-                                    
-                                    reject(error);
-                                } else {
-                                    logger.info('[DEBUG] PowerShell extraction successful');
-                                    resolve();
-                                }
-                            });
-                        } else {
-                            // Linux/macOS : utiliser tar pour extraire le .tar.gz
-                            const command = `tar -xzf "${tempArchive}" -C "${arduinoDir}"`;
-                            
-                            logger.info(`[DEBUG] Linux/macOS detected, using tar`);
-                            logger.info(`[DEBUG] Tar command: ${command}`);
-                            logger.info(`[DEBUG] About to execute: exec("${command}")`);
-                            
-                            const startTime = Date.now();
-                            exec(command, (error, stdout, stderr) => {
-                                const duration = Date.now() - startTime;
-                                logger.info(`[DEBUG] Tar command completed in ${duration}ms`);
-                                
-                                if (stdout) {
-                                    logger.info(`[DEBUG] Tar stdout: ${stdout}`);
-                                }
-                                if (stderr) {
-                                    logger.warn(`[DEBUG] Tar stderr: ${stderr}`);
-                                }
-                                
-                                if (error) {
-                                    logger.error(`[DEBUG] Tar error occurred:`);
-                                    logger.error(`[DEBUG] Error code: ${error.code}`);
-                                    logger.error(`[DEBUG] Error signal: ${error.signal}`);
-                                    logger.error(`[DEBUG] Error message: ${error.message}`);
-                                    logger.error(`[DEBUG] Error stack: ${error.stack}`);
-                                    reject(error);
-                                } else {
-                                    logger.info('[DEBUG] Tar extraction successful');
-                                    resolve();
-                                }
-                            });
-                        }
+            return compilePythonToHex(microPythonCode)
+                .then(hexContent => {
+                    showNotification(browserWindow, t.microbit.notifications.uploadProgress || 'Téléversement en cours...');
+                    const finalPath = path.join(selectedMicrobitDrive, CONSTANTS.PROGRAM_HEX_FILENAME);
+                    return new Promise((resolve, reject) => {
+                        fs.writeFile(finalPath, hexContent, 'utf8', (err) => {
+                            if (err) {
+                                logger.error('Error writing HEX file to micro:bit:', err && err.stack ? err.stack : err);
+                                showNotification(browserWindow, t.microbit.notifications.uploadError || 'Erreur lors de l\'écriture du fichier HEX');
+                                reject(err);
+                            } else {
+                                logger.info('HEX file written successfully to', finalPath);
+                                showNotification(browserWindow, t.microbit.notifications.uploadSuccess || 'Fichier HEX copié sur la carte micro:bit.');
+                                resolve();
+                            }
+                        });
                     });
-                    
-                    logger.info('[DEBUG] Extraction promise resolved, checking results...');
-                    
-                    // Supprimer l'archive temporaire
-                    logger.info('[DEBUG] Removing temporary archive...');
-                    try {
-                        fs.unlinkSync(tempArchive);
-                        logger.info('[DEBUG] Temporary archive removed successfully');
-                    } catch (unlinkError) {
-                        logger.warn(`[DEBUG] Failed to remove temporary archive: ${unlinkError.message}`);
-                    }
-                    
-                    // Le binaire devrait être dans arduinoDir maintenant
-                    logger.info(`[DEBUG] Checking if Arduino CLI binary exists at: ${arduinoCliPath}`);
-                    if (fs.existsSync(arduinoCliPath)) {
-                        logger.info('[DEBUG] Arduino CLI binary found!');
-                        makeExecutable(arduinoCliPath);
-                        logger.info('[DEBUG] Made Arduino CLI executable');
-                        
-                        // Vérifier et créer le fichier de configuration
-                        ensureArduinoCliConfig(configPath);
-                        logger.info('[DEBUG] Arduino CLI config ensured');
-                        
-                        if (browserWindow) {
-                            showNotification(browserWindow, 'Arduino CLI téléchargé et installé avec succès');
-                        }
-                        logger.info('[DEBUG] Installation completed successfully');
-                        return true;
-                    } else {
-                        logger.error('[DEBUG] Arduino CLI binary NOT found after extraction');
-                        logger.error(`[DEBUG] Expected path: ${arduinoCliPath}`);
-                        logger.error(`[DEBUG] Arduino directory contents:`);
-                        try {
-                            const dirContents = fs.readdirSync(arduinoDir);
-                            logger.error(`[DEBUG] Files in arduinoDir: ${JSON.stringify(dirContents)}`);
-                        } catch (readError) {
-                            logger.error(`[DEBUG] Failed to read arduinoDir: ${readError.message}`);
-                        }
-                        
-                        if (browserWindow) {
-                            showNotification(browserWindow, 'Erreur : binaire Arduino CLI introuvable après extraction');
-                        }
-                        return false;
-                    }
-                } catch (extractError) {
-                    logger.error('[DEBUG] Exception caught during extraction:');
-                    logger.error(`[DEBUG] Error type: ${extractError.constructor.name}`);
-                    logger.error(`[DEBUG] Error message: ${extractError.message}`);
-                    logger.error(`[DEBUG] Error code: ${extractError.code}`);
-                    logger.error(`[DEBUG] Error stack: ${extractError.stack}`);
-                    
-                    safeExecute(() => fs.unlinkSync(tempArchive));
-                    if (browserWindow) {
-                        const errorMsg = extractError.message || 'Erreur inconnue';
-                        showNotification(browserWindow, `Erreur extraction: ${errorMsg}\n\nLogs détaillés dans:\n${logFile}`);
-                    }
-                    return false;
-                }
-                } else {
-                    // Téléchargement direct du binaire
-                    logger.info('[DEBUG] Processing as direct binary download');
-                    logger.info(`[DEBUG] Downloading directly to: ${arduinoCliPath}`);
-                    await downloadToFile(downloadUrl, arduinoCliPath);
-                    logger.info('[DEBUG] Binary download completed');
-                    
-                    if (fs.existsSync(arduinoCliPath)) {
-                        logger.info('[DEBUG] Binary file exists after download');
-                        makeExecutable(arduinoCliPath);
-                        logger.info('[DEBUG] Made binary executable');
-                        // Vérifier et créer le fichier de configuration
-                        ensureArduinoCliConfig(configPath);
-                        logger.info('[DEBUG] Config file ensured');
-                        if (browserWindow) {
-                            showNotification(browserWindow, 'Arduino CLI téléchargé et installé avec succès');
-                        }
-                        logger.info('[DEBUG] Direct binary installation completed successfully');
-                        return true;
-                    } else {
-                        logger.error(`[DEBUG] Binary file does not exist after download: ${arduinoCliPath}`);
-                        if (browserWindow) {
-                            showNotification(browserWindow, 'Erreur : binaire Arduino CLI introuvable après téléchargement');
-                        }
-                        return false;
-                    }
-                }
-        } catch (error) {
-            logger.error('[DEBUG] Exception in download/installation block:');
-            logger.error(`[DEBUG] Error type: ${error.constructor.name}`);
-            logger.error(`[DEBUG] Error message: ${error.message}`);
-            logger.error(`[DEBUG] Error code: ${error.code}`);
-            logger.error(`[DEBUG] Error stack: ${error.stack}`);
-            logger.error('Failed to download Arduino CLI:', error);
-            if (browserWindow) {
-                const errorMsg = error.message || 'Erreur inconnue';
-                showNotification(browserWindow, `Erreur téléchargement: ${errorMsg}\n\nLogs détaillés dans:\n${logFile}`);
-            }
-            return false;
-        }
-    } catch (error) {
-        // Gérer les erreurs de manière gracieuse (ex: permissions, chemins invalides)
-        logger.error('[DEBUG] Exception in ensureArduinoCli outer catch:');
-        logger.error(`[DEBUG] Error type: ${error.constructor.name}`);
-        logger.error(`[DEBUG] Error message: ${error.message}`);
-        logger.error(`[DEBUG] Error code: ${error.code}`);
-        logger.error(`[DEBUG] Error stack: ${error.stack}`);
-        logger.error('Error in ensureArduinoCli:', error);
-        return false;
-    }
+                })
+                .catch(err => {
+                    logger.error('Error compiling Python to HEX:', err && err.stack ? err.stack : err);
+                    const errorMsg = (err && err.message) ? err.message : (err && err.toString) ? err.toString() : translations.menu?.errors?.unknownError || 'Erreur inconnue';
+                    showNotification(browserWindow, (t.microbit.notifications.uploadError || 'Erreur de compilation') + '\n' + errorMsg);
+                });
+        })
+        .catch(error => {
+            logger.error('Error extracting code from editor:', error);
+            showNotification(browserWindow, t.copyCode.notifications.error);
+        });
 }
 
 /**
@@ -2788,7 +912,6 @@ async function ensureArduinoCli(browserWindow, autoDownload = true) {
  * @param {BrowserWindow|null} browserWindow - La fenêtre pour afficher les popups
  */
 async function checkRequiredBinaries(browserWindow) {
-    const { dialog } = require('electron');
     const missingBinaries = [];
     
     // Vérifier Arduino CLI
@@ -2855,10 +978,25 @@ async function installMicroPythonRuntimes(browserWindow) {
         } catch (error) {
             logger.error(`Failed to create cache directory ${cacheDir}:`, error.message);
             if (browserWindow) {
-                showNotification(browserWindow, `Erreur : impossible de créer le répertoire de cache.\n${error.message}\n\nVérifiez les permissions d'écriture.`);
+                const msg = (translations.menu?.microbit?.notifications?.installErrorCacheDir || 'Erreur : impossible de créer le répertoire de cache.\n{message}\n\nVérifiez les permissions d\'écriture.').replace('{message}', error.message);
+                showNotification(browserWindow, msg);
             }
-                        return;
-                    }
+            return;
+        }
+
+        // Vérifier que le cache est bien inscriptible (test d'écriture)
+        const testFile = path.join(cacheDir, '.write-test');
+        try {
+            fs.writeFileSync(testFile, 'ok', 'utf8');
+            fs.unlinkSync(testFile);
+        } catch (error) {
+            logger.error(`Cache directory not writable ${cacheDir}:`, error.message);
+            if (browserWindow) {
+                const msg = (t.microbit.notifications.installErrorCacheNotWritable || 'Le dossier de cache n\'est pas inscriptible.\n\nCache : {path}').replace('{path}', cacheDir);
+                showNotification(browserWindow, msg);
+            }
+            return;
+        }
 
         const v1Path = PATHS.microbit.v1;
         const v2Path = PATHS.microbit.v2;
@@ -2867,6 +1005,7 @@ async function installMicroPythonRuntimes(browserWindow) {
 
         let v1Hex = null;
         let v2Hex = null;
+        let lastInstallError = null;
 
         // Vérifier d'abord dans les ressources packagées
         if (fileCache.exists(v1Path)) {
@@ -2905,7 +1044,16 @@ async function installMicroPythonRuntimes(browserWindow) {
                 const url = await getMicrobitV1HexUrl();
                 if (url) {
                     logger.info(`Downloading MICROBIT_V1.hex from ${url}`);
-                    await downloadToFile(url, v1Cache);
+                    const nameV1 = 'MICROBIT_V1.hex';
+                    await downloadToFile(url, v1Cache, {
+                        onProgress: ({ percent, received, total }) => {
+                            if (!browserWindow) return;
+                            const msg = total != null
+                                ? (t.microbit.notifications.downloadHexProgress || '').replace('{name}', nameV1).replace('{percent}', Math.round(percent))
+                                : (t.microbit.notifications.downloadHexProgressBytes || '').replace('{name}', nameV1).replace('{received}', (received / 1024 / 1024).toFixed(1));
+                            if (msg) showNotification(browserWindow, msg);
+                        }
+                    });
                     v1Hex = fs.readFileSync(v1Cache, 'utf8');
                     if (v1Hex.trim().startsWith(':')) {
                         logger.info(`Successfully downloaded MICROBIT_V1.hex from ${url}`);
@@ -2915,11 +1063,11 @@ async function installMicroPythonRuntimes(browserWindow) {
                     }
                 } else {
                     logger.warn('Could not get micro:bit v1 HEX URL from GitHub API');
-                    // Ne pas afficher de notification ici, le message d'erreur final sera affiché
-            }
-        } catch (e) {
+                    lastInstallError = 'URL V1 introuvable (GitHub API).';
+                }
+            } catch (e) {
                 logger.error(`Failed to download MICROBIT_V1.hex:`, e.message || e);
-                // Ne pas afficher de notification ici, le message d'erreur final sera affiché
+                lastInstallError = (e && e.message) ? e.message : String(e);
             }
         }
 
@@ -2929,7 +1077,16 @@ async function installMicroPythonRuntimes(browserWindow) {
                 const url = await getMicrobitV2HexUrl();
                 if (url) {
                     logger.info(`Downloading MICROBIT.hex from ${url}`);
-                    await downloadToFile(url, v2Cache);
+                    const nameV2 = 'MICROBIT.hex';
+                    await downloadToFile(url, v2Cache, {
+                        onProgress: ({ percent, received, total }) => {
+                            if (!browserWindow) return;
+                            const msg = total != null
+                                ? (t.microbit.notifications.downloadHexProgress || '').replace('{name}', nameV2).replace('{percent}', Math.round(percent))
+                                : (t.microbit.notifications.downloadHexProgressBytes || '').replace('{name}', nameV2).replace('{received}', (received / 1024 / 1024).toFixed(1));
+                            if (msg) showNotification(browserWindow, msg);
+                        }
+                    });
                     v2Hex = fs.readFileSync(v2Cache, 'utf8');
                     if (v2Hex.trim().startsWith(':')) {
                         logger.info(`Successfully downloaded MICROBIT.hex from ${url}`);
@@ -2939,11 +1096,11 @@ async function installMicroPythonRuntimes(browserWindow) {
                     }
                 } else {
                     logger.warn('Could not get micro:bit v2 HEX URL from GitHub API');
-                    // Ne pas afficher de notification ici, le message d'erreur final sera affiché
+                    if (!lastInstallError) lastInstallError = 'URL V2 introuvable (GitHub API).';
                 }
             } catch (e) {
                 logger.error(`Failed to download MICROBIT.hex:`, e.message || e);
-                // Ne pas afficher de notification ici, le message d'erreur final sera affiché
+                lastInstallError = (e && e.message) ? e.message : String(e);
             }
         }
 
@@ -2985,18 +1142,25 @@ async function installMicroPythonRuntimes(browserWindow) {
                     .replace('{v2Status}', v2Status);
             showNotification(browserWindow, partialMsg);
         } else {
-            showNotification(browserWindow, t.microbit.notifications.installError || 'Erreur: Impossible de télécharger les runtimes MicroPython.');
+            const genericDetail = t.microbit.notifications.installErrorDetailFallback || 'Vérifiez la connexion Internet et les droits d\'écriture du dossier de cache.';
+            const detailText = lastInstallError || genericDetail;
+            const detail = (t.microbit.notifications.installErrorDetail || 'Détail : {error}').replace('{error}', detailText);
+            const cacheHint = cacheDir ? '\n\nCache : ' + cacheDir : '';
+            showNotification(browserWindow, (t.microbit.notifications.installError || 'Impossible d\'installer les runtimes MicroPython.') + '\n\n' + detail + cacheHint);
         }
     } catch (e) {
         logger.error('Error installing MicroPython runtimes:', e);
-        showNotification(browserWindow, t.microbit.notifications.installError || 'Erreur lors de l\'installation des runtimes MicroPython.');
+        const te = translations.menu?.microbit?.notifications || {};
+        const errMsg = e && e.message ? e.message : String(e);
+        const detail = (te.installErrorDetail || 'Détail : {error}').replace('{error}', errMsg);
+        showNotification(browserWindow, (te.installError || 'Erreur lors de l\'installation des runtimes MicroPython.') + '\n\n' + detail);
     }
 }
 
 
 async function listArduinoBoards(browserWindow) {
     // Vérifier si Arduino CLI est disponible (sans téléchargement automatique)
-    const arduinoCliAvailable = await ensureArduinoCli(browserWindow, false);
+    const arduinoCliAvailable = await ensureArduinoCli(browserWindow, false, translations.menu);
     if (!arduinoCliAvailable) {
         // Si Arduino CLI n'est pas disponible, mettre à jour le menu avec une liste vide
         previousBoards = [];
@@ -3004,34 +1168,24 @@ async function listArduinoBoards(browserWindow) {
             return;
         }
 
-    execCommand(buildArduinoCliCommand(`board list`), {
+    execCommand(buildArduinoCliCommand(`board list --json`), {
         browserWindow,
-        // Ne pas afficher d'erreur automatiquement - on gère manuellement
         showError: null,
         onSuccess: (stdout) => {
-        // Parse the output to extract Port and Board Name
-        const lines = stdout.split('\n');
-        const boards = lines
-            .slice(1) // Skip header line
-            .filter(line => line.trim()) // Remove empty lines
-            .map(line => {
-                const parts = line.split(/\s+/);
-                const port = parts[0];
-                let boardName = parts[5];
-                if (parts[6] !== undefined) {
-                    boardName += ' ' + parts[6];
-                }
-                return { port, boardName };
-            });
-
-        // Check if the board list has changed
-            const hasChanges = !areListsEqual(boards, previousBoards);
-
+        // 1. Parser le JSON : port.address et port.properties.vid pour chaque objet
+        let parsed = parseBoardListJson(stdout);
+        if (parsed.length === 0 && stdout.trim()) {
+            parsed = parseBoardListText(stdout);
+        }
+        // 2. VID 0D28 = micro:bit → on ne l'ajoute pas ; sinon on ajoute port.address au menu
+        const boards = buildArduinoMenuList(parsed);
+        // 3. Comparer à l'état précédent ; si rien n'a changé, ne rien faire
+        const hasChanges = !boardListsEqual(boards, previousBoards);
         previousBoards = boards;
-        refreshMenu();
-        updateBoardStatusIcons();
 
         if (hasChanges) {
+            refreshMenu();
+            updateBoardStatusIcons();
             if (boards.length === 0) {
                 // Réinitialiser la sélection si aucune carte n'est disponible
                 selectedPort = null;
@@ -3071,7 +1225,7 @@ async function listArduinoBoards(browserWindow) {
 }
 
 app.whenReady().then(() => {
-    if (process.platform === 'win32') {
+    if (isWindows) {
         app.setAppUserModelId(app.name);
     }
     createWindow();
@@ -3082,8 +1236,10 @@ app.whenReady().then(() => {
         }
     });
 
-    // Initial language setup
-    switchLanguage(app.getLocale());
+    // Initial language setup : langue mémorisée si présente, sinon langue système
+    const savedLocale = getSavedLocale();
+    const initialLocale = (savedLocale === 'fr' || savedLocale === 'en') ? savedLocale : systemLocale;
+    switchLanguage(initialLocale);
 
     // Vérifier les binaires requis au démarrage
     const mainWindow = getMainWindow();
@@ -3092,29 +1248,17 @@ app.whenReady().then(() => {
     // Initialiser l'état des icônes au démarrage
     updateBoardStatusIcons();
 
-    // Start background board detection service
-    // Ne pas télécharger automatiquement au démarrage, juste vérifier si disponible
-    listArduinoBoards(mainWindow).catch(error => {
-    });
+    // Détection des cartes Arduino (une fois au démarrage, puis à intervalle)
+    listArduinoBoards(mainWindow).catch(() => {});
     boardDetectionInterval = setInterval(() => {
-        listArduinoBoards(mainWindow).catch(error => {
-            // Ignorer les erreurs silencieusement lors de la détection périodique
-        });
+        listArduinoBoards(mainWindow).catch(() => {});
     }, DETECTION_INTERVAL);
 
-    // Start background micro:bit drive detection service
+    // Détection des lecteurs micro:bit (une fois au démarrage, puis à intervalle)
     listMicrobitDrives(mainWindow);
     microbitDetectionInterval = setInterval(() => {
         listMicrobitDrives(mainWindow);
     }, DETECTION_INTERVAL);
-
-    // Keep Arduino menu and let board detection service update it
-    const mainMenu = Menu.getApplicationMenu();
-    if (mainMenu) {
-        listArduinoBoards(mainWindow).catch(error => {
-        });
-        listMicrobitDrives(mainWindow);
-    }
 });
 
 app.on('window-all-closed', function () {
@@ -3126,7 +1270,7 @@ app.on('window-all-closed', function () {
         clearInterval(microbitDetectionInterval);
     }
 
-    if (process.platform !== 'darwin') {
+    if (!isMac) {
         app.quit();
     }
 });
@@ -3139,461 +1283,53 @@ function switchLanguage(locale) {
     const newTranslations = loadTranslations(locale) || loadTranslations('en');
     translations = newTranslations;
     currentLocale = locale;
+    saveLocale(locale);
     BrowserWindow.getAllWindows().forEach(win => {
         win.webContents.send('language-changed', locale);
     });
     refreshMenu();
 }
 
-/**
- * Affiche une notification dans la fenêtre du navigateur
- * @param {BrowserWindow|null} browserWindow - La fenêtre où afficher la notification
- * @param {string} message - Le message à afficher
- */
-function showNotification(browserWindow, message) {
-    if (!browserWindow || !message) {
-        return;
-    }
-        const escapedMessage = message.replace(/[\\"']/g, '\\$&').replace(/\n/g, '\\n');
-    const delay = CONSTANTS.NOTIFICATION_DELAY;
-    const duration = CONSTANTS.NOTIFICATION_DURATION;
-        browserWindow.webContents.executeJavaScript(`
-            (() => {
-                try {
-                    // Supprimer les notifications précédentes pour éviter la superposition
-                    const existingNotifications = document.querySelectorAll('[data-tinkercad-notification]');
-                    existingNotifications.forEach(notif => {
-                        notif.style.opacity = '0';
-                        setTimeout(() => notif.remove(), ${delay});
-                    });
-                    
-                    const notification = document.createElement('div');
-                    notification.setAttribute('data-tinkercad-notification', 'true');
-                    notification.style.position = 'fixed';
-                    notification.style.left = '50%';
-                    notification.style.top = '50%';
-                    notification.style.transform = 'translate(-50%, -50%)';
-                    notification.style.backgroundColor = '#333';
-                    notification.style.color = 'white';
-                    notification.style.padding = '10px 20px';
-                    notification.style.borderRadius = '5px';
-                    notification.style.zIndex = '9999';
-                    notification.style.opacity = '0';
-                    notification.style.transition = 'opacity 0.3s ease-in-out';
-                    notification.style.textAlign = 'center';
-                    notification.style.whiteSpace = 'pre-wrap';
-                    notification.style.fontFamily = '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
-                    notification.style.fontSize = '14px';
-                    notification.textContent = "${escapedMessage}";
-                    notification.style.cursor = 'pointer';
-                    notification.addEventListener('click', () => {
-                        notification.style.opacity = '0';
-                    setTimeout(() => notification.remove(), ${delay});
-                    });
-                    
-                    document.body.appendChild(notification);
-                    
-                    // Trigger reflow
-                    notification.offsetHeight;
-                    
-                    // Show notification
-                    notification.style.opacity = '1';
-                    
-                // Remove after ${duration}ms
-                    setTimeout(() => {
-                        notification.style.opacity = '0';
-                    setTimeout(() => notification.remove(), ${delay});
-                }, ${duration});
-                } catch (error) {
-                    console.error('Error showing notification:', error);
-                }
-            })();
-        `);
-    }
-/**
- * Crée le menu Fichier de l'application
- * @param {Object} t - Objet de traductions
- * @param {string} locale - Code de langue actuel
- * @returns {Object} Configuration du menu Fichier
- */
-function createFileMenu(t, locale) {
+function getMenuContext() {
     return {
-            label: t.file.label,
-            submenu: [
-                {
-                    label: t.copyCode.label,
-                    accelerator: 'CommandOrControl+Alt+C',
-                    click: (menuItem, browserWindow) => {
-                        if (browserWindow) {
-                        executeScriptInWebview(browserWindow, CODE_EXTRACTION_SCRIPT).then(text => {
-                            if (text != CONSTANTS.EMPTY_CODE) {
-                                    clipboard.writeText(text);
-                                    showNotification(browserWindow, t.copyCode.notifications.success);
-                                } else {
-                                showNotification(browserWindow, t.copyCode.notifications.empty || 'Aucun code trouvé');
-                                }
-                            }).catch(error => {
-                            logger.error('Error copying code:', error);
-                                showNotification(browserWindow, t.copyCode.notifications.error);
-                            });
-                        }
-                    }
-                },
-                { type: 'separator' },
-                {
-                    label: t.file.language,
-                    submenu: [
-                        {
-                            label: 'English',
-                            type: 'radio',
-                            checked: locale === 'en',
-                            click: () => switchLanguage('en')
-                        },
-                        {
-                            label: 'Français',
-                            type: 'radio',
-                            checked: locale === 'fr',
-                            click: () => switchLanguage('fr')
-                        }
-                    ]
-                },
-                { type: 'separator' },
-                { role: 'quit', label: t.file.quit }
-            ]
-    };
-}
-
-/**
- * Crée le menu Arduino de l'application
- * @param {Object} t - Objet de traductions
- * @returns {Object} Configuration du menu Arduino
- */
-function createArduinoMenu(t) {
-    return {
-            label: 'Arduino',
-            submenu: [
-                {
-                    label: t.listPorts.label,
-                    id: 'ports-menu',
-                    submenu: previousBoards.map(board => ({
-                        label: `${board.port} - ${board.boardName}`,
-                        type: 'radio',
-                        checked: selectedPort === board.port,
-                        click: () => {
-                            selectedPort = board.port;
-                        const mainWindow = getMainWindow();
-                            if (mainWindow) {
-                                showNotification(mainWindow, t.listPorts.notifications.portSelected.replace('{port}', board.port) + ', ' + board.boardName);
-                            }
-                            selectedBoard = board.boardName;
-                        }
-                    }))
-                },
-                {
-                    label: t.uploadCode.label,
-                    click: (menuItem, browserWindow) => {
-                        if (!selectedPort) {
-                            showNotification(browserWindow, t.uploadCode.notifications.noPort);
-                            return;
-                        }
-                        // Vérifier que le port sélectionné existe toujours dans la liste des cartes détectées
-                        const portExists = previousBoards.some(board => board.port === selectedPort);
-                        if (!portExists) {
-                            showNotification(browserWindow, t.uploadCode.notifications.falsePort);
-                            return;
-                        }
-                    extractCodeFromEditor(browserWindow).then(code => {
-                        if (code === CONSTANTS.EMPTY_CODE) {
-                                showNotification(browserWindow, t.copyCode.notifications.empty);
-                                return;
-                            }
-                        compileAndUploadArduino(code, selectedPort, browserWindow).catch(error => {
-                            logger.error('Error in Arduino upload process:', error);
-                            const errorMsg = error && error.message ? error.message : 'Erreur inconnue lors de la compilation/téléversement';
-                            showNotification(browserWindow, t.uploadCode.notifications.error + '\n' + errorMsg);
-                            });
-                        }).catch(error => {
-                        logger.error('Error extracting code:', error);
-                            showNotification(browserWindow, t.copyCode.notifications.error);
-                        });
-                    }
-                },
-                { type: 'separator' },
-                {
-                    label: t.installLibrary.label,
-                    click: () => {
-                        const libraryDialog = new BrowserWindow({
-                            width: 400,
-                            height: 200,
-                            frame: false,
-                            resizable: false,
-                            webPreferences: {
-                                nodeIntegration: true,
-                                contextIsolation: true,
-                            preload: PATHS.preload
-                            }
-                        });
-                        libraryDialog.loadFile('library-dialog.html');
-                    }
-                },
-                { type: 'separator' },
-                {
-                    label: t.file.installArduino.label,
-                click: async (menuItem, browserWindow) => {
-                    try {
-                        // Vérifier et télécharger Arduino CLI si nécessaire
-                        const arduinoCliAvailable = await ensureArduinoCli(browserWindow);
-                        if (!arduinoCliAvailable) {
-                            if (browserWindow) {
-                                showNotification(browserWindow, 'Erreur : Arduino CLI n\'a pas pu être installé. Vérifiez votre connexion internet et les permissions d\'écriture.');
-                            }
-                                return;
-                            }
-                        
-                        // Installer le core Arduino AVR
-                        await execCommand(buildArduinoCliCommand(`core install arduino:avr`), {
-                            browserWindow,
-                            showProgress: 'Installation du compilateur Arduino en cours...',
-                            showError: null, // On gère l'erreur manuellement avec plus de détails
-                            showSuccess: t.file.installArduino.notifications.success,
-                            onError: (error) => {
-                                logger.error(`Error installing Arduino compiler: ${error}`);
-                                const errorMsg = error && error.message ? error.message : String(error);
-                                if (browserWindow) {
-                                    showNotification(browserWindow, t.file.installArduino.notifications.error + '\n' + errorMsg);
-                                }
-                            }
-                        });
-                    } catch (error) {
-                        logger.error(`Error in installArduino menu: ${error}`);
-                        if (browserWindow) {
-                            const errorMsg = error && error.message ? error.message : 'Erreur inconnue';
-                            showNotification(browserWindow, t.file.installArduino.notifications.error + '\n' + errorMsg);
-                        }
-                    }
-                    }
-                }
-            ]
-    };
-}
-
-/**
- * Crée le menu micro:bit de l'application
- * @param {Object} t - Objet de traductions
- * @returns {Object} Configuration du menu micro:bit
- */
-function createMicrobitMenu(t) {
-    return {
-            label: t.microbit.label,
-            submenu: [
-                {
-                label: t.microbit.listBoards || t.listPorts.label || 'Lister les cartes disponibles',
-                id: 'microbit-drives-menu',
-                submenu: previousMicrobitDrives.length > 0
-                    ? previousMicrobitDrives.map(drive => ({
-                        label: `${drive.drive} - ${drive.volName}`,
-                        type: 'radio',
-                        checked: selectedMicrobitDrive === drive.drive,
-                        click: () => {
-                            selectedMicrobitDrive = drive.drive;
-                            const mainWindow = getMainWindow();
-                            if (mainWindow) {
-                                showNotification(mainWindow, (t.microbit.notifications.found || 'Carte micro:bit trouvée').replace('{drive}', drive.drive));
-                            }
-                        }
-                    }))
-                    : [{
-                        label: t.microbit.notifications.notFound || 'Aucune carte détectée',
-                        enabled: false
-                    }]
-            },
-            {
-                label: t.microbit.upload || 'Téléverser le programme',
-                click: async (menuItem, browserWindow) => {
-                        if (!selectedMicrobitDrive) {
-                        showNotification(browserWindow, t.microbit.notifications.noDrive || 'Aucune carte micro:bit sélectionnée');
-                            return;
-                        }
-
-                    // Récupérer le code depuis la div de l'éditeur
-                    extractCodeFromEditor(browserWindow, { useAdvancedSelectors: true }).then(code => {
-                        if (code === CONSTANTS.EMPTY_CODE) {
-                                showNotification(browserWindow, t.copyCode.notifications.empty);
-                                return;
-                            }
-
-
-                        // Normaliser et nettoyer le code
-                        let cleanedCode = cleanPythonCode(code);
-
-                        // Afficher le message de compilation
-                        showNotification(browserWindow, t.compileCode.notifications.progress || 'Compilation en cours...');
-
-                        // Convertir le code MakeCode en MicroPython si nécessaire AVANT compilation
-                        let microPythonCode = cleanedCode;
-                        if (isMakeCodePython(cleanedCode)) {
-                            microPythonCode = convertMakeCodeToMicroPython(cleanedCode);
-                        }
-
-                        // Compiler et copier sur la carte
-                        const firmwareName = CONSTANTS.PROGRAM_HEX_FILENAME;
-                        const finalPath = path.join(selectedMicrobitDrive, firmwareName);
-
-                        compilePythonToHex(microPythonCode).then(hexContent => {
-                            logger.info('Writing HEX file to micro:bit, content length:', hexContent.length);
-
-                            // Afficher le message de téléversement après la compilation réussie
-                            showNotification(browserWindow, t.microbit.notifications.uploadProgress || 'Téléversement en cours...');
-
-                            fs.writeFile(finalPath, hexContent, 'utf8', (err) => {
-                                    if (err) {
-                                    logger.error('Error writing HEX file to micro:bit:', err && err.stack ? err.stack : err);
-                                    showNotification(browserWindow, t.microbit.notifications.uploadError || 'Erreur lors de l\'écriture du fichier HEX');
-                                        return;
-                                    }
-
-                                logger.info('HEX file written successfully to', finalPath);
-
-                                // Afficher une notification de succès
-                                showNotification(browserWindow, t.microbit.notifications.uploadSuccess || 'Fichier HEX copié sur la carte micro:bit.');
-                            });
-                        }).catch(err => {
-                            logger.error('Error compiling Python to HEX:', err && err.stack ? err.stack : err);
-                            const errorMsg = (err && err.message) ? err.message : (err && err.toString) ? err.toString() : 'Erreur inconnue';
-                            showNotification(browserWindow, (t.microbit.notifications.uploadError || 'Erreur de compilation') + '\n' + errorMsg);
-                        });
-                    }).catch(error => {
-                        logger.error('Error extracting code from editor:', error);
-                        showNotification(browserWindow, t.copyCode.notifications.error);
-                    });
-                }
-            },
-            { type: 'separator' },
-            {
-                label: t.microbit.showConverted || 'Afficher le code converti',
-                click: async (menuItem, browserWindow) => {
-                    try {
-                        // Récupérer le code depuis la div de l'éditeur (même méthode que pour Arduino)
-                        const code = await executeScriptInWebview(browserWindow, CODE_EXTRACTION_SCRIPT);
-
-                        if (!code || code === CONSTANTS.EMPTY_CODE || !code.trim()) {
-                            showNotification(browserWindow, t.microbit.convertedCode.noCodeFound || 'Aucun code trouvé dans l\'éditeur');
-                            return;
-                        }
-
-                        // Nettoyer le code
-                        let cleanedCode = code.trim();
-                        cleanedCode = cleanedCode.split('\n')
-                            .map(line => line.replace(/\t/g, '    ').replace(/[ \t]+$/g, ''))
-                            .join('\n');
-                        cleanedCode = cleanedCode.replace(/\n{3,}/g, '\n\n').trim();
-
-                        // Convertir le code MakeCode en MicroPython si nécessaire
-                        let microPythonCode = cleanedCode;
-                        if (isMakeCodePython(cleanedCode)) {
-                            microPythonCode = convertMakeCodeToMicroPython(cleanedCode);
-
-                            // Valider la syntaxe et afficher les erreurs
-                            validatePythonSyntaxWithDisplay(microPythonCode, browserWindow);
-                        } else if (!microPythonCode.includes('from microbit import')) {
-                            microPythonCode = 'from microbit import *\\n\\n' + microPythonCode;
-                        }
-
-                        // Afficher la fenêtre avec le code converti
-                        showConvertedCodeWindow(microPythonCode);
-                    } catch (error) {
-                        logger.error('Error showing converted code:', error);
-                        const errorMsg = (t.microbit.convertedCode.errorRetrieving || 'Erreur lors de la récupération du code: {error}')
-                            .replace('{error}', error.message || error);
-                        showNotification(browserWindow, errorMsg);
-                    }
-                }
-            },
-            { type: 'separator' },
-            {
-                label: t.microbit.install || 'Installer MicroPython hors-ligne',
-                click: (menuItem, browserWindow) => {
-                    installMicroPythonRuntimes(browserWindow);
-                }
-            }
-        ]
-    };
-}
-
-/**
- * Crée le menu Affichage de l'application
- * @param {Object} t - Objet de traductions
- * @returns {Object} Configuration du menu Affichage
- */
-function createViewMenu(t) {
-    return {
-            label: t.view.label,
-            submenu: [
-                { role: 'reload', label: t.view.reload },
-                { role: 'forceReload', label: t.view.forceReload },
-                { type: 'separator' },
-                { role: 'resetZoom', label: t.view.resetZoom },
-                { role: 'zoomIn', label: t.view.zoomIn },
-                { role: 'zoomOut', label: t.view.zoomOut },
-                { type: 'separator' },
-                { role: 'togglefullscreen', label: t.view.toggleFullscreen },
-                { role: 'toggleDevTools', label: t.view.toggleDevTools }
-            ]
-    };
-}
-
-/**
- * Crée le menu Aide de l'application
- * @param {Object} t - Objet de traductions
- * @returns {Object} Configuration du menu Aide
- */
-function createHelpMenu(t) {
-    return {
-            label: t.help.label,
-            submenu: [
-                {
-                    label: t.help.about,
-                    click: async () => {
-                        const { dialog } = require('electron');
-                        const packageInfo = require('./package.json');
-                        await dialog.showMessageBox({
-                            type: 'info',
-                            title: t.help.about,
-                        message: 'Tinkercad QHL',
-                            detail: `Version: ${packageInfo.version}\nAuteur: ${packageInfo.author}\nDate: ${packageInfo.date}\nLicense: ${packageInfo.license}`
-                        });
-                    }
-                },
-                {
-                    label: t.help.checkUpdate,
-                    click: () => checkForUpdates(getMainWindow())
-                },
-                {
-                    label: t.help.learnMore,
-                    click: async () => {
-                        const { shell } = require('electron');
-                        await shell.openExternal('https://www.tinkercad.com/learn/circuits');
-                    }
-            },
-            { type: 'separator' },
-            {
-                label: t.help.makeDonation,
-                click: async () => {
-                    const { shell } = require('electron');
-                    await shell.openExternal('https://paypal.me/sebcanet');
-                }
-            },
-            {
-                label: t.help.requestInvoice,
-                click: async () => {
-                    const { shell } = require('electron');
-                    const email = 'scanet@libreduc.cc';
-                    const subject = encodeURIComponent('demande de facture');
-                    const body = encodeURIComponent('Bonjour Sébastien,\n\nje suis enseignant de ... au collège/lycée ..., à ... .\n\nAfin de faire un \'don\' par voie officielle, merci de me faire parvenir un devis pour une facture d\'un montant de ...€ pour que je puisse le soumettre au CA/à mon agent comptable.\n\nMerci beaucoup de soutenir les logiciles libres !');
-                    await shell.openExternal(`mailto:${email}?subject=${subject}&body=${body}`);
-                }
-            }
-        ]
+        t: translations.menu,
+        locale: currentLocale,
+        getMainWindow,
+        showNotification,
+        path,
+        directory,
+        BrowserWindow,
+        Menu,
+        clipboard,
+        logger,
+        dialog,
+        shell,
+        getSelectedPort: () => selectedPort,
+        setSelectedPort: (v) => { selectedPort = v; },
+        getSelectedBoard: () => selectedBoard,
+        setSelectedBoard: (v) => { selectedBoard = v; },
+        getSelectedMicrobitDrive: () => selectedMicrobitDrive,
+        setSelectedMicrobitDrive: (v) => { selectedMicrobitDrive = v; },
+        previousBoards,
+        previousMicrobitDrives,
+        runArduinoUploadFlow,
+        runMicrobitUploadFlow,
+        switchLanguage,
+        buildArduinoCliCommand,
+        execCommand,
+        ensureArduinoCli,
+        translations: { menu: translations.menu },
+        executeScriptInWebview,
+        CODE_EXTRACTION_SCRIPT,
+        CONSTANTS,
+        cleanPythonCode,
+        isMakeCodePython,
+        convertMakeCodeToMicroPython,
+        validatePythonSyntaxWithDisplay,
+        showConvertedCodeWindow,
+        installMicroPythonRuntimes,
+        checkForUpdates,
+        packageInfo
     };
 }
 
@@ -3614,15 +1350,6 @@ function updateBoardStatusIcons() {
  * Rafraîchit le menu de l'application en reconstruisant tous les sous-menus
  */
 function refreshMenu() {
-    const t = translations.menu;
-    const locale = currentLocale;
-    const template = [
-        createFileMenu(t, locale),
-        createArduinoMenu(t),
-        createMicrobitMenu(t),
-        createViewMenu(t),
-        createHelpMenu(t)
-    ];
-    const newMenu = Menu.buildFromTemplate(template);
-    Menu.setApplicationMenu(newMenu);
+    const template = buildApplicationMenu(getMenuContext());
+    Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }

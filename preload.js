@@ -3,6 +3,11 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('api', {
     closeWindow: () => ipcRenderer.send('close-library-dialog'),
     installLibrary: (libraryName) => ipcRenderer.send('install-library', libraryName),
+    onInstallLibraryDone: (callback) => {
+        const handler = (event, result) => callback(result);
+        ipcRenderer.on('install-library-done', handler);
+        return () => ipcRenderer.removeListener('install-library-done', handler);
+    },
     getTranslation: async (key) => {
         try {
             return await ipcRenderer.invoke('get-translation', key);
