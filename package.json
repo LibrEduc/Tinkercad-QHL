@@ -12,7 +12,7 @@
     "build:win:debug": "node scripts/set-debug-mode.js true && electron-builder --win zip && node scripts/set-debug-mode.js false",
     "build:linux": "electron-builder --linux",
     "build:mac": "electron-builder --mac",
-    "build:all": "electron-builder --win zip --linux --mac",
+    "build:all": "electron-builder --win zip --linux zip",
     "monitor-microbit": "node scripts/monitor_microbit_drive.js"
   },
   "keywords": [],
@@ -40,7 +40,8 @@
       ],
       "defaultArch": "x64",
       "icon": "assets/autodesk-tinkercad.png",
-      "executableName": "Tinkercad QHL"
+      "executableName": "Tinkercad QHL",
+      "artifactName": "${productName}-${version}-Windows-${arch}.${ext}"
     },
     "linux": {
       "target": [
@@ -48,7 +49,8 @@
         "zip"
       ],
       "category": "Education",
-      "icon": "assets/autodesk-tinkercad.png"
+      "icon": "assets/autodesk-tinkercad.png",
+      "artifactName": "${productName}-${version}-Linux-${arch}.${ext}"
     },
     "mac": {
       "target": [
@@ -56,7 +58,8 @@
         "zip"
       ],
       "category": "public.app-category.education",
-      "icon": "assets/autodesk-tinkercad.png"
+      "icon": "assets/autodesk-tinkercad.png",
+      "artifactName": "${productName}-${version}-macOS-${arch}.${ext}"
     },
     "extraResources": [
       {
