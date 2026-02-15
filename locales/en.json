@@ -141,6 +141,7 @@
     "help": {
       "label": "Help",
       "learnMore": "Learn More",
+      "whoAreYou": "Who are you?",
       "about": "About",
       "checkUpdate": "Check for updates",
       "checkUpdateChecking": "Checking for updates...",

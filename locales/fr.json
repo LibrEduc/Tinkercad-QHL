@@ -141,6 +141,7 @@
     "help": {
       "label": "Aide",
       "learnMore": "En savoir plus",
+      "whoAreYou": "Qui êtes vous ?",
       "about": "À propos",
       "checkUpdate": "Vérifier les mises à jour",
       "checkUpdateChecking": "Vérification des mises à jour...",
