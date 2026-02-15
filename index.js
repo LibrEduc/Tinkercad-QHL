@@ -40,7 +40,6 @@ const {
 } = require('./lib/arduino');
 const { fileCache } = require('./lib/fileCache');
 const { buildApplicationMenu } = require('./lib/menu');
-const { PATHS: pathPaths } = require('./lib/paths');
 
 const packageInfo = require('./package.json');
 
@@ -279,8 +278,8 @@ function createWindow() {
     // Load index.html with toolbar
     mainWindow.loadFile('index.html');
 
-    // Ouvrir les DevTools automatiquement pour voir les logs de débogage (uniquement en développement)
-    if (isDev()) {
+    // Ouvrir les DevTools automatiquement uniquement en mode debug (TINKERCAD_DEBUG=1 ou npm run start:debug)
+    if (isDev() && DEBUG_FILE_LOGGING) {
         mainWindow.webContents.openDevTools();
     }
     
@@ -1299,7 +1298,7 @@ function getMenuContext() {
         showNotification,
         path,
         directory,
-        iconPath: pathPaths.icon,
+        iconPath: PATHS.icon,
         BrowserWindow,
         Menu,
         clipboard,
