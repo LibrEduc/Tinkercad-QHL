@@ -1,0 +1,19 @@
+{
+  "source": {
+    "include": ["index.js", "preload.cjs", "lib/", "debug-mode.js"],
+    "includePattern": "\\.js$",
+    "excludePattern": "(node_modules|test|scripts/monitor|scripts/test_)"
+  },
+  "opts": {
+    "destination": "docs/",
+    "recurse": true,
+    "readme": "README.md"
+  },
+  "templates": {
+    "default": {
+      "outputSourceFiles": true,
+      "includeDate": true
+    }
+  },
+  "plugins": []
+}

@@ -1,19 +1,19 @@
 /**
- * Tests pour lib/utils.js (sans dépendance Electron)
+ * Tests for lib/utils.js (no Electron dependency)
  */
-const { describe, it } = require('node:test');
-const assert = require('node:assert');
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const { safeUnlink, safeClose } = require('../lib/utils');
+import { describe, it } from 'node:test';
+import assert from 'node:assert';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { safeUnlink, safeClose } from '../lib/utils.js';
 
 describe('safeUnlink', () => {
-    it('ne leve pas exception si le fichier nexiste pas', () => {
+    it('does not throw if the file does not exist', () => {
         assert.doesNotThrow(() => safeUnlink(path.join(os.tmpdir(), 'nonexistent-' + Date.now())));
     });
 
-    it('supprime un fichier existant', () => {
+    it('removes an existing file', () => {
         const p = path.join(os.tmpdir(), 'tinkercad-test-' + Date.now());
         fs.writeFileSync(p, '');
         assert.strictEqual(fs.existsSync(p), true);
@@ -23,15 +23,15 @@ describe('safeUnlink', () => {
 });
 
 describe('safeClose', () => {
-    it('ne leve pas exception si stream est null', () => {
+    it('does not throw if stream is null', () => {
         assert.doesNotThrow(() => safeClose(null));
     });
 
-    it('ne leve pas exception si stream na pas de close', () => {
+    it('does not throw if stream has no close', () => {
         assert.doesNotThrow(() => safeClose({}));
     });
 
-    it('appelle close si present', () => {
+    it('calls close when present', () => {
         let closed = false;
         safeClose({ close: () => { closed = true; } });
         assert.strictEqual(closed, true);

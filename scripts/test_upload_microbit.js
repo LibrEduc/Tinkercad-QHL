@@ -1,6 +1,9 @@
-const fs = require('fs');
-const path = require('path');
-const { MicropythonFsHex, microbitBoardId } = require('@microbit/microbit-fs');
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { MicropythonFsHex, microbitBoardId } from '@microbit/microbit-fs';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function ensureHexes() {
   const base = path.join(__dirname, '..', 'microbit-cache');

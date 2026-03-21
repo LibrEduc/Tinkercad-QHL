@@ -1,5 +1,30 @@
+# Build Electron (electron-builder)
 dist/
+
+# Dépendances
 node_modules/
+
+# Données locales / portable (Arduino CLI, cache micro:bit, debug.log)
 data/
+
+# Téléchargements temporaires Arduino CLI (config arduino-cli.yaml)
 suppr/
+
+# Binaires Windows
 *.exe
+
+# Documentation générée (npm run docs)
+docs/
+
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Variables d'environnement locales (optionnel)
+.env
+.env.local
+.env.*.local
+
+# Logs à la racine (debug.log est dans data/)
+*.log
+npm-debug.log*

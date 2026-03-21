@@ -1,47 +1,57 @@
 /**
- * Tinkercad QHL - Point d'entrée Electron (processus principal)
+ * @file index.js
+ * @description Tinkercad QHL - Electron main process entry point. Handles the main window,
+ * menu (via getMenuContext + lib/menu), IPC (translations, icons, Arduino/micro:bit upload), micro:bit HEX
+ * loading, Python→HEX compilation, board and micro:bit drive detection.
  *
- * Organisation du fichier (pour maintenance) :
- * - Lignes ~28-120  : IPC (get-translation, get-icon-paths), handlers upload
- * - ~120-220        : Traductions, createWindow
- * - ~275-420        : Helpers (safeExecute, getMainWindow, areListsEqual, isMicrobitDrive)
- * - ~420-470        : loadHexFile, ensureMicroPythonHexes
- * - ~470-650        : showConvertedCodeWindow (fenêtre code converti)
- * - ~650-820        : compilePythonToHex (micro:bit)
- * - ~820-1010       : listMicrobitDrives, updateMicrobitDrivesList
- * - ~1010-1100      : runArduinoUploadFlow, runMicrobitUploadFlow
- * - ~1100-1320      : checkRequiredBinaries, installMicroPythonRuntimes
- * - ~1320-1450      : listArduinoBoards
- * - ~1450-1580      : app.whenReady, switchLanguage, getMenuContext, refreshMenu, updateBoardStatusIcons
+ * File organization (for maintenance):
+ * - ~28-120   : IPC (get-translation, get-icon-paths), upload handlers
+ * - ~120-220  : Translations, createWindow
+ * - ~275-420  : Helpers (safeExecute, getMainWindow, areListsEqual, isMicrobitDrive)
+ * - ~420-470  : loadHexFile, ensureMicroPythonHexes
+ * - ~470-650  : showConvertedCodeWindow (converted code window)
+ * - ~650-820  : compilePythonToHex (micro:bit)
+ * - ~820-1010 : listMicrobitDrives, updateMicrobitDrivesList
+ * - ~1010-1100: runArduinoUploadFlow, runMicrobitUploadFlow
+ * - ~1100-1320: checkRequiredBinaries, installMicroPythonRuntimes
+ * - ~1320-1450: listArduinoBoards
+ * - ~1450-1580: app.whenReady, switchLanguage, getMenuContext, refreshMenu, updateBoardStatusIcons
+ *
+ * @module index
+ * @author Sébastien Canet
+ * @license CC0-1.0
  */
-const { app, BrowserWindow, Menu, clipboard, ipcMain, webContents, shell, dialog } = require('electron');
-const path = require('node:path');
-const fs = require('fs');
-const { exec } = require('child_process');
-const { MicropythonFsHex, microbitBoardId } = require('@microbit/microbit-fs');
 
-const { isDev, directory, directoryAppAsar, PATHS, getPortableDataDir, ensurePortableDataDir, getExtraResourcePath } = require('./lib/paths');
-const { CONSTANTS, DETECTION_INTERVAL, MICROBIT_DETAILS_PATTERNS } = require('./lib/constants');
-const { isMakeCodePython, convertMakeCodeToMicroPython } = require('./lib/microbitConversion');
-const { cleanPythonCode, validatePythonSyntax, validatePythonSyntaxWithDisplay } = require('./lib/pythonUtils');
-const { isWindows, isMac } = require('./lib/platform');
-const { parseBoardListJson, parseBoardListText, buildArduinoMenuList, boardListsEqual } = require('./lib/boardDetection');
-const { logger, logFile, DEBUG_FILE_LOGGING } = require('./lib/logger');
-const { showNotification } = require('./lib/notifications');
-const { getMicrobitV1HexUrl, getMicrobitV2HexUrl } = require('./lib/github');
-const { checkForUpdates } = require('./lib/updates');
-const { downloadToFile } = require('./lib/download');
-const { CODE_EXTRACTION_SCRIPT, normalizeUnicode, executeScriptInWebview, extractCodeFromEditor } = require('./lib/codeExtraction');
-const {
+import { app, BrowserWindow, Menu, clipboard, ipcMain, webContents, shell, dialog } from 'electron';
+import path from 'node:path';
+import fs from 'fs';
+import { fileURLToPath } from 'node:url';
+import { exec, spawnSync } from 'child_process';
+import { MicropythonFsHex, microbitBoardId } from '@microbit/microbit-fs';
+
+import { isDev, directory, directoryAppAsar, PATHS, getPortableDataDir, ensurePortableDataDir, getExtraResourcePath } from './lib/paths.js';
+import { CONSTANTS, DETECTION_INTERVAL, MICROBIT_DETAILS_PATTERNS } from './lib/constants.js';
+import { isMakeCodePython, convertMakeCodeToMicroPython } from './lib/microbitConversion.js';
+import { cleanPythonCode, validatePythonSyntax, validatePythonSyntaxWithDisplay } from './lib/pythonUtils.js';
+import { isWindows, isMac } from './lib/platform.js';
+import { parseBoardListJson, parseBoardListText, buildArduinoMenuList, boardListsEqual } from './lib/boardDetection.js';
+import { logger, logFile, DEBUG_FILE_LOGGING } from './lib/logger.js';
+import { showNotification } from './lib/notifications.js';
+import { getMicrobitV1HexUrl, getMicrobitV2HexUrl } from './lib/github.js';
+import { checkForUpdates } from './lib/updates.js';
+import { downloadToFile } from './lib/download.js';
+import { CODE_EXTRACTION_SCRIPT, normalizeUnicode, executeScriptInWebview, extractCodeFromEditor } from './lib/codeExtraction.js';
+import {
     buildArduinoCliCommand,
     execCommand,
     ensureArduinoCli,
     compileAndUploadArduino
-} = require('./lib/arduino');
-const { fileCache } = require('./lib/fileCache');
-const { buildApplicationMenu } = require('./lib/menu');
+} from './lib/arduino.js';
+import { fileCache } from './lib/fileCache.js';
+import { buildApplicationMenu } from './lib/menu.js';
 
-const packageInfo = require('./package.json');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const packageInfo = JSON.parse(fs.readFileSync(path.join(__dirname, 'package.json'), 'utf8'));
 
 // IPC handlers for library dialog
 ipcMain.on('close-library-dialog', (event) => {
@@ -65,25 +75,25 @@ ipcMain.handle('get-translation', (event, key) => {
 
 // Handle icon paths requests
 ipcMain.handle('get-icon-paths', (event) => {
-    // En mode production, les ressources sont dans extraResources
-    // En mode développement, elles sont dans le dossier assets du projet
+    // In production, resources are in extraResources
+    // In development, they are in the project's assets folder
     let assetsDir;
     if (isDev()) {
         assetsDir = path.join(directory, 'assets');
     } else {
-        // En production, extraResources avec "to": "../assets" sont copiés au niveau parent de resources/
+        // In production, extraResources with "to": "../assets" are copied at the parent of resources/
         // Structure: app/ -> assets/, resources/ -> app.asar
-        // Utiliser le chemin de l'exécutable pour trouver le dossier de l'application
-        const exePath = process.execPath; // Chemin vers l'exécutable
-        const appDir = path.dirname(exePath); // Dossier de l'application (win-unpacked/)
+        // Use the executable path to find the application directory
+        const exePath = process.execPath; // Path to the executable
+        const appDir = path.dirname(exePath); // Application directory (win-unpacked/)
         assetsDir = path.join(appDir, 'assets');
         
-        // Vérifier si le chemin existe, sinon essayer d'autres chemins
+        // Check if the path exists, otherwise try other paths
         if (!fs.existsSync(path.join(assetsDir, 'arduino-logo.svg'))) {
-            // Fallback: essayer depuis resources/
+            // Fallback: try from resources/
             const fallbackPaths = [
-                path.join(path.dirname(directoryAppAsar), 'assets'),  // ../assets depuis resources/
-                path.join(directoryAppAsar, 'assets'),                  // assets/ dans resources/
+                path.join(path.dirname(directoryAppAsar), 'assets'),  // ../assets from resources/
+                path.join(directoryAppAsar, 'assets'),                  // assets/ in resources/
             ];
             
             const foundPath = fallbackPaths.find(p => {
@@ -99,12 +109,12 @@ ipcMain.handle('get-icon-paths', (event) => {
         }
     }
     
-    // Normaliser les chemins pour file:// (remplacer les backslashes par des slashes)
-    // Sur Windows, les chemins absolus commencent par C:\..., donc file:///C:/...
+    // Normalize paths for file:// (replace backslashes with slashes)
+    // On Windows, absolute paths start with C:\..., so file:///C:/...
     const normalizePath = (p) => {
         const resolved = path.resolve(p);
         let normalized = resolved.replace(/\\/g, '/');
-        // S'assurer que les chemins Windows commencent par / pour file://
+        // Ensure Windows paths start with / for file://
         if (normalized.match(/^[A-Z]:\//)) {
             normalized = '/' + normalized;
         }
@@ -114,7 +124,7 @@ ipcMain.handle('get-icon-paths', (event) => {
     const arduinoIcon = path.join(assetsDir, 'arduino-logo.svg');
     const microbitIcon = path.join(assetsDir, 'Microbit_Hex.png');
     
-    // Vérifier que les fichiers existent
+    // Check that the files exist
     if (!fs.existsSync(arduinoIcon)) {
         logger.warn('Arduino icon not found at:', arduinoIcon);
         logger.warn('Assets directory:', assetsDir);
@@ -188,11 +198,11 @@ ipcMain.on('install-library', (event, libraryName) => {
 });
 
 // Load translations
-// Cache pour les traductions chargées
+// Cache for loaded translations
 const translationCache = new Map();
 
 function loadTranslations(locale) {
-    // Vérifier le cache d'abord
+    // Check cache first
     if (translationCache.has(locale)) {
         return translationCache.get(locale);
     }
@@ -216,7 +226,7 @@ let currentLocale = systemLocale;
 
 const CONFIG_FILENAME = 'config.json';
 
-/** Retourne la langue mémorisée ('fr' ou 'en') ou null si absente/invalide */
+/** Returns the saved locale ('fr' or 'en') or null if missing/invalid */
 function getSavedLocale() {
     try {
         const configPath = path.join(getPortableDataDir(), CONFIG_FILENAME);
@@ -230,7 +240,7 @@ function getSavedLocale() {
     return null;
 }
 
-/** Enregistre le choix de langue dans le dossier portable (data/config.json) */
+/** Saves the language choice in the portable directory (data/config.json) */
 function saveLocale(locale) {
     try {
         ensurePortableDataDir();
@@ -248,10 +258,10 @@ if (!translations) {
     translations = loadTranslations('en');
 }
 
-// Menu : construit au premier refreshMenu() (dans app.whenReady via switchLanguage(systemLocale))
+// Menu: built on first refreshMenu() (in app.whenReady via switchLanguage(systemLocale))
 
 /**
- * Crée la fenêtre principale de l'application Electron
+ * Creates the main Electron application window
  */
 function createWindow() {
     const mainWindow = new BrowserWindow({
@@ -263,8 +273,8 @@ function createWindow() {
             nodeIntegration: false,
             contextIsolation: true,
             sandbox: true,
-            preload: path.resolve(directory, 'preload.js'),
-            webviewTag: true  // Nécessaire pour utiliser les balises <webview>
+            preload: path.resolve(directory, 'preload.cjs'),
+            webviewTag: true  // Required to use <webview> tags
         }
     });
 
@@ -278,22 +288,22 @@ function createWindow() {
     // Load index.html with toolbar
     mainWindow.loadFile('index.html');
 
-    // Ouvrir les DevTools automatiquement uniquement en mode debug (TINKERCAD_DEBUG=1 ou npm run start:debug)
+    // Open DevTools automatically only in debug mode (TINKERCAD_DEBUG=1 or npm run start:debug)
     if (isDev() && DEBUG_FILE_LOGGING) {
         mainWindow.webContents.openDevTools();
     }
     
-    // Afficher le chemin du fichier de log au démarrage (uniquement si mode debug activé)
+    // Show log file path on startup (only when debug mode is enabled)
     if (DEBUG_FILE_LOGGING) {
-        logger.info(`Fichier de log: ${logFile}`);
+        logger.info(`Log file: ${logFile}`);
         if (!isDev()) {
             mainWindow.webContents.once('did-finish-load', () => {
-                showNotification(mainWindow, `Fichier de log: ${logFile}`);
+                showNotification(mainWindow, `Log file: ${logFile}`);
             });
         }
     }
 
-    // S'assurer que le titre reste "Tinkercad QHL" même après le chargement de la page
+    // Ensure the title stays "Tinkercad QHL" even after the page loads
     mainWindow.on('page-title-updated', (event) => {
         event.preventDefault();
         mainWindow.setTitle('Tinkercad QHL');
@@ -307,7 +317,7 @@ function createWindow() {
 }
 
 // ============================================================================
-// HELPERS ET UTILITAIRES
+// HELPERS AND UTILITIES
 // ============================================================================
 
 logger.info('Application started');
@@ -319,48 +329,48 @@ logger.info(`Node version: ${process.version}`);
 logger.info(`Electron version: ${process.versions.electron}`);
 
 /**
- * Exécute une fonction de manière sécurisée, en gérant les erreurs silencieusement
- * @param {Function} fn - La fonction à exécuter
+ * Executes a function safely, handling errors silently
+ * @param {Function} fn - The function to execute
  */
 function safeExecute(fn) {
     try {
         fn();
     } catch (error) {
-        // Ignorer les erreurs silencieusement
+        // Ignore errors silently
         logger.debug('safeExecute error:', error.message);
     }
 }
 
-// Obtenir la fenêtre principale avec vérification
+// Get the main window with check
 function getMainWindow() {
     const windows = BrowserWindow.getAllWindows();
     return windows.length > 0 ? windows[0] : null;
 }
 
-// Obtenir la fenêtre principale en excluant une fenêtre spécifique
+// Get the main window excluding a specific window
 function getMainWindowExcluding(excludeWindow) {
     const windows = BrowserWindow.getAllWindows();
     return windows.find(w => w !== excludeWindow) || getMainWindow();
 }
 
-// Comparer deux listes d'objets de manière optimisée
+// Compare two object lists in an optimized way
 function areListsEqual(list1, list2) {
-    // Comparaison rapide de la longueur
+    // Quick length comparison
     if (list1.length !== list2.length) {
         return false;
     }
 
-    // Si les listes sont vides, elles sont égales
+    // If lists are empty, they are equal
     if (list1.length === 0) {
         return true;
     }
 
-    // Pour de petites listes, comparaison directe champ par champ est plus rapide
+    // For small lists, direct field-by-field comparison is faster
     if (list1.length <= 5) {
         for (let i = 0; i < list1.length; i++) {
             const item1 = list1[i];
             const item2 = list2[i];
-            // Comparaison rapide des clés principales
+            // Quick comparison of main keys
             if (item1.port !== item2.port || item1.drive !== item2.drive ||
                 item1.boardName !== item2.boardName || item1.volName !== item2.volName) {
                 return false;
@@ -369,14 +379,14 @@ function areListsEqual(list1, list2) {
         return true;
     }
 
-    // Pour de plus grandes listes, utiliser JSON.stringify (acceptable)
+    // For larger lists, use JSON.stringify (acceptable)
     return JSON.stringify(list1) === JSON.stringify(list2);
 }
 
 /**
- * Vérifie si un chemin correspond à un lecteur micro:bit
- * @param {string} drivePath - Le chemin du lecteur à vérifier
- * @returns {boolean} true si c'est un lecteur micro:bit, false sinon
+ * Checks whether a path corresponds to a micro:bit drive
+ * @param {string} drivePath - The drive path to check
+ * @returns {boolean} true if it is a micro:bit drive, false otherwise
  */
 function isMicrobitDrive(drivePath) {
     try {
@@ -391,12 +401,12 @@ function isMicrobitDrive(drivePath) {
     }
 }
 
-// Charger un fichier HEX (V1 ou V2)
+// Load a HEX file (V1 or V2)
 /**
- * Charge un fichier HEX MicroPython (v1 ou v2) depuis les ressources ou le cache
- * @param {string} version - Version du micro:bit ('v1' ou 'v2')
- * @param {string} directoryAppAsar - Répertoire de l'application
- * @returns {string|null} Le contenu du fichier HEX ou null si introuvable
+ * Loads a MicroPython HEX file (v1 or v2) from resources or cache
+ * @param {string} version - micro:bit version ('v1' or 'v2')
+ * @param {string} directoryAppAsar - Application directory
+ * @returns {string|null} HEX file content or null if not found
  */
 function loadHexFile(version, directoryAppAsar) {
     const isV1 = version === 'v1';
@@ -407,11 +417,11 @@ function loadHexFile(version, directoryAppAsar) {
 
     let hexContent = null;
 
-    // Vérifier d'abord dans les ressources packagées
+    // Check packaged resources first
     if (fileCache.exists(hexPath)) {
         hexContent = fs.readFileSync(hexPath, 'utf8');
         if (hexContent.trim().startsWith(':')) {
-            // Copier dans le cache pour usage futur
+            // Copy to cache for future use
             if (!fileCache.exists(cacheDir)) {
                 fs.mkdirSync(cacheDir, { recursive: true });
                 fileCache.invalidate(cacheDir);
@@ -426,7 +436,7 @@ function loadHexFile(version, directoryAppAsar) {
         }
     }
 
-    // Vérifier dans le cache si pas trouvé dans les ressources
+    // Check cache if not found in resources
     if (!hexContent && fileCache.exists(cachePath)) {
         hexContent = fs.readFileSync(cachePath, 'utf8');
         if (!hexContent.trim().startsWith(':')) {
@@ -444,12 +454,12 @@ let microbitDetectionInterval;
 let previousBoards = [];
 let previousMicrobitDrives = [];
 
-// Méthode PythonEditor : utiliser microbit-fs pour créer le HEX
-// PythonEditor charge les runtimes MicroPython et écrit le code dans main.py
+// PythonEditor method: use microbit-fs to create the HEX
+// PythonEditor loads MicroPython runtimes and writes the code to main.py
 /**
- * S'assure que les fichiers HEX MicroPython sont disponibles
- * @returns {Promise<{v1Hex: string|null, v2Hex: string|null}>} Objet contenant les fichiers HEX
- * @throws {Error} Si aucun fichier HEX n'est trouvé
+ * Ensures MicroPython HEX files are available
+ * @returns {Promise<{v1Hex: string|null, v2Hex: string|null}>} Object containing the HEX files
+ * @throws {Error} If no HEX file is found
  */
 async function ensureMicroPythonHexes() {
 
@@ -463,10 +473,10 @@ async function ensureMicroPythonHexes() {
     return { v1Hex, v2Hex };
 }
 
-// Afficher le code MicroPython converti dans une fenêtre
+// Show converted MicroPython code in a window
 /**
- * Affiche une fenêtre avec le code MicroPython converti
- * @param {string} code - Le code MicroPython à afficher
+ * Shows a window with the converted MicroPython code
+ * @param {string} code - The MicroPython code to display
  */
 function showConvertedCodeWindow(code) {
     const t = translations?.menu || {};
@@ -481,7 +491,7 @@ function showConvertedCodeWindow(code) {
         }
     });
 
-    // Masquer complètement la barre de menu
+    // Hide the menu bar completely
     codeWindow.setMenuBarVisibility(false);
 
     const title = t.microbit?.convertedCode?.title || 'Code MicroPython Converti';
@@ -593,7 +603,7 @@ function showConvertedCodeWindow(code) {
         const code = ${JSON.stringify(code)};
         const lines = code.split('\\n');
         
-        // Générer les numéros de ligne
+        // Generate line numbers
         let lineNumbersHtml = '';
         let codeContentHtml = '';
         lines.forEach((line, index) => {
@@ -614,7 +624,7 @@ function showConvertedCodeWindow(code) {
             navigator.clipboard.writeText(code).then(() => {
                 alert('${copySuccess}');
             }).catch(err => {
-                console.error('Erreur lors de la copie:', err);
+                console.error('Copy error:', err);
             });
         }
         
@@ -628,60 +638,60 @@ function showConvertedCodeWindow(code) {
     codeWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
 }
 
-// Compiler le code Python en HEX (méthode PythonEditor)
+// Compile Python code to HEX (PythonEditor method)
 /**
- * Compile le code Python/MicroPython en fichier HEX pour micro:bit
- * @param {string} code - Le code Python/MicroPython à compiler
- * @returns {Promise<string>} Le contenu du fichier HEX généré
- * @throws {Error} Si la compilation échoue ou si les runtimes sont introuvables
+ * Compiles Python/MicroPython code to a HEX file for micro:bit
+ * @param {string} code - The Python/MicroPython code to compile
+ * @returns {Promise<string>} The generated HEX file content
+ * @throws {Error} If compilation fails or runtimes are not found
  */
 async function compilePythonToHex(code) {
     logger.info('Compiling Python to HEX using microbit-fs (PythonEditor method)...');
 
     try {
-        // Convertir le code MakeCode en MicroPython standard si nécessaire
+        // Convert MakeCode code to standard MicroPython if needed
         let microPythonCode = code;
         if (code.includes('basic.') || code.includes('IconNames.') || code.includes('basic.forever')) {
             microPythonCode = convertMakeCodeToMicroPython(code);
         } else if (!microPythonCode.includes('from microbit import')) {
-            // Ajouter l'import si absent même pour du code MicroPython standard
+            // Add import if missing even for standard MicroPython code
             microPythonCode = 'from microbit import *\n\n' + microPythonCode;
         }
 
-        // Charger les runtimes MicroPython V1 et V2
+        // Load MicroPython runtimes V1 and V2
         const { v1Hex, v2Hex } = await ensureMicroPythonHexes();
 
-        // Créer le système de fichiers MicroPython avec les deux runtimes
+        // Create MicroPython filesystem with both runtimes
         const fsHex = new MicropythonFsHex([
             { hex: v1Hex, boardId: microbitBoardId.V1 },
             { hex: v2Hex, boardId: microbitBoardId.V2 }
         ]);
 
-        // Écrire le code Python dans main.py (comme PythonEditor)
+        // Write Python code to main.py (like PythonEditor)
         fsHex.write('main.py', microPythonCode);
 
-        // Générer le HEX universel (compatible V1 et V2)
+        // Generate universal HEX (V1 and V2 compatible)
         const hexContent = fsHex.getUniversalHex();
 
         logger.info('Compilation successful, HEX length:', hexContent.length);
         return hexContent;
     } catch (err) {
         logger.error('Error compiling Python to HEX:', err && err.stack ? err.stack : err);
-        const errMsg = (err && err.message) ? err.message : (err && err.toString) ? err.toString() : translations.menu?.errors?.unknownError || 'Erreur inconnue';
-        throw new Error((translations.menu?.errors?.compileErrorPrefix || 'Erreur lors de la compilation: ') + errMsg);
+        const errMsg = (err && err.message) ? err.message : (err && err.toString) ? err.toString() : translations.menu?.errors?.unknownError || 'Unknown error';
+        throw new Error((translations.menu?.errors?.compileErrorPrefix || 'Compilation error: ') + errMsg);
     }
 }
 
-// Détecter les lecteurs micro:bit disponibles (comme listArduinoBoards)
+// Detect available micro:bit drives (like listArduinoBoards)
 /**
- * Liste les lecteurs micro:bit disponibles et met à jour le menu
- * @param {BrowserWindow|null} browserWindow - La fenêtre pour afficher les notifications
+ * Lists available micro:bit drives and updates the menu
+ * @param {BrowserWindow|null} browserWindow - Window to show notifications in
  */
 function listMicrobitDrives(browserWindow) {
     const drives = [];
 
     if (isWindows) {
-        // Windows : lister tous les lecteurs et vérifier la présence de DETAILS.TXT
+        // Windows: list all drives and check for DETAILS.TXT
         exec('wmic logicaldisk get Name', (error, stdout) => {
             if (error) {
                 logger.error(`Error listing drives: ${error.message || error}`);
@@ -689,7 +699,7 @@ function listMicrobitDrives(browserWindow) {
                 return;
             }
 
-            // Parser les lettres de lecteurs (C:, D:, E:, etc.)
+            // Parse drive letters (C:, D:, E:, etc.)
             const driveLetterMatches = stdout.matchAll(/([A-Z]):/gi);
             const driveLetters = [];
             for (const match of driveLetterMatches) {
@@ -699,16 +709,15 @@ function listMicrobitDrives(browserWindow) {
                 }
             }
 
-            // Vérifier chaque lecteur pour la présence de DETAILS.TXT de micro:bit
+            // Check each drive for micro:bit DETAILS.TXT
             let checkedCount = 0;
             for (const driveLetter of driveLetters) {
                 try {
                     if (isMicrobitDrive(driveLetter)) {
-                        // Essayer de récupérer le nom du volume
+                        // Try to get the volume name
                         let volName = CONSTANTS.DEFAULT_MICROBIT_VOLUME_NAME;
                         try {
-                            // Utiliser spawnSync au lieu de execSync avec shell pour éviter l'erreur dans la version compilée
-                            const { spawnSync } = require('child_process');
+                            // Use spawnSync instead of execSync with shell to avoid error in built version
                             const result = spawnSync('wmic', ['logicaldisk', 'where', `Name='${driveLetter}'`, 'get', 'VolumeName'], {
                                 encoding: 'utf8'
                             });
@@ -721,7 +730,7 @@ function listMicrobitDrives(browserWindow) {
                                 }
                             }
                         } catch (e) {
-                            // Utiliser le nom par défaut
+                            // Use default name
                         }
 
                         drives.push({
@@ -730,7 +739,7 @@ function listMicrobitDrives(browserWindow) {
                         });
                     }
                 } catch (e) {
-                    // Ignorer les erreurs (lecteur peut être inaccessible)
+                    // Ignore errors (drive may be inaccessible)
                 }
                 checkedCount++;
             }
@@ -908,18 +917,18 @@ function runMicrobitUploadFlow(browserWindow) {
 }
 
 /**
- * Vérifie les binaires requis (Arduino CLI et MicroPython) au démarrage
- * @param {BrowserWindow|null} browserWindow - La fenêtre pour afficher les popups
+ * Checks required binaries (Arduino CLI and MicroPython) at startup
+ * @param {BrowserWindow|null} browserWindow - Window to show popups in
  */
 async function checkRequiredBinaries(browserWindow) {
     const missingBinaries = [];
     
-    // Vérifier Arduino CLI
+    // Check Arduino CLI
     if (!fs.existsSync(PATHS.arduinoCli)) {
         missingBinaries.push('Arduino CLI');
     }
     
-    // Vérifier les binaires MicroPython
+    // Check MicroPython binaries
     const missingMicrobit = [];
     if (!fs.existsSync(PATHS.microbit.v1)) {
         missingMicrobit.push('MICROBIT_V1.hex');
@@ -959,16 +968,16 @@ async function checkRequiredBinaries(browserWindow) {
 
 /**
  * Installe les runtimes MicroPython (v1 et v2) depuis les ressources ou en les téléchargeant
- * @param {BrowserWindow|null} browserWindow - La fenêtre pour afficher les notifications
+ * @param {BrowserWindow|null} browserWindow - Window to show notifications in
  */
 async function installMicroPythonRuntimes(browserWindow) {
     try {
         const t = translations.menu;
-        // Ne pas afficher la notification de début pour éviter la superposition
-        // Elle sera remplacée par le message final (succès ou erreur)
+        // Do not show start notification to avoid overlap
+        // It will be replaced by the final message (success or error)
 
         const cacheDir = PATHS.microbit.cache;
-        // Créer le répertoire de cache avec gestion d'erreur améliorée
+        // Create cache directory with improved error handling
         try {
             if (!fs.existsSync(cacheDir)) {
                 fs.mkdirSync(cacheDir, { recursive: true });
@@ -984,7 +993,7 @@ async function installMicroPythonRuntimes(browserWindow) {
             return;
         }
 
-        // Vérifier que le cache est bien inscriptible (test d'écriture)
+        // Check that the cache is writable (write test)
         const testFile = path.join(cacheDir, '.write-test');
         try {
             fs.writeFileSync(testFile, 'ok', 'utf8');
@@ -1007,7 +1016,7 @@ async function installMicroPythonRuntimes(browserWindow) {
         let v2Hex = null;
         let lastInstallError = null;
 
-        // Vérifier d'abord dans les ressources packagées
+        // Check packaged resources first
         if (fileCache.exists(v1Path)) {
             v1Hex = fs.readFileSync(v1Path, 'utf8');
             if (v1Hex.trim().startsWith(':')) {
@@ -1027,7 +1036,7 @@ async function installMicroPythonRuntimes(browserWindow) {
             }
         }
 
-        // Vérifier dans le cache
+        // Check cache
         if (!v1Hex && fileCache.exists(v1Cache)) {
             v1Hex = fs.readFileSync(v1Cache, 'utf8');
             if (!v1Hex.trim().startsWith(':')) v1Hex = null;
@@ -1037,7 +1046,7 @@ async function installMicroPythonRuntimes(browserWindow) {
             if (!v2Hex.trim().startsWith(':')) v2Hex = null;
         }
 
-        // Télécharger si nécessaire
+        // Download if needed
         if (!v1Hex) {
             try {
                 // Récupérer l'URL depuis l'API GitHub
@@ -1159,10 +1168,10 @@ async function installMicroPythonRuntimes(browserWindow) {
 
 
 async function listArduinoBoards(browserWindow) {
-    // Vérifier si Arduino CLI est disponible (sans téléchargement automatique)
+    // Check if Arduino CLI is available (without auto-download)
     const arduinoCliAvailable = await ensureArduinoCli(browserWindow, false, translations.menu);
     if (!arduinoCliAvailable) {
-        // Si Arduino CLI n'est pas disponible, mettre à jour le menu avec une liste vide
+        // If Arduino CLI is not available, update menu with empty list
         previousBoards = [];
         refreshMenu();
             return;
@@ -1172,14 +1181,14 @@ async function listArduinoBoards(browserWindow) {
         browserWindow,
         showError: null,
         onSuccess: (stdout) => {
-        // 1. Parser le JSON : port.address et port.properties.vid pour chaque objet
+        // 1. Parse JSON: port.address and port.properties.vid for each item
         let parsed = parseBoardListJson(stdout);
         if (parsed.length === 0 && stdout.trim()) {
             parsed = parseBoardListText(stdout);
         }
-        // 2. VID 0D28 = micro:bit → on ne l'ajoute pas ; sinon on ajoute port.address au menu
+        // 2. VID 0D28 = micro:bit → do not add; otherwise add port.address to menu
         const boards = buildArduinoMenuList(parsed);
-        // 3. Comparer à l'état précédent ; si rien n'a changé, ne rien faire
+        // 3. Compare to previous state; if nothing changed, do nothing
         const hasChanges = !boardListsEqual(boards, previousBoards);
         previousBoards = boards;
 
@@ -1187,11 +1196,11 @@ async function listArduinoBoards(browserWindow) {
             refreshMenu();
             updateBoardStatusIcons();
             if (boards.length === 0) {
-                // Réinitialiser la sélection si aucune carte n'est disponible
+                // Reset selection if no board is available
                 selectedPort = null;
-                // Ne pas afficher de notification si aucune carte n'est connectée (c'est normal)
+                // Do not show notification when no board is connected (normal)
             } else {
-                // Auto-sélectionner la première carte si aucune n'est sélectionnée
+                // Auto-select first board if none is selected
                 if (!selectedPort || !boards.some(b => b.port === selectedPort)) {
                     selectedPort = boards[0].port;
                     selectedBoard = boards[0].boardName;
@@ -1200,8 +1209,8 @@ async function listArduinoBoards(browserWindow) {
         }
         },
         onError: (error) => {
-            // Si la commande échoue, traiter comme une liste vide (aucune carte connectée)
-            // Ce n'est pas une vraie erreur, juste qu'il n'y a pas de cartes
+            // If command fails, treat as empty list (no board connected)
+            // Not a real error, just no boards present
             logger.debug(`No boards found or error (this is normal if no boards are connected): ${error}`);
             const hasChanges = previousBoards.length > 0;
             previousBoards = [];
@@ -1212,7 +1221,7 @@ async function listArduinoBoards(browserWindow) {
             }
         }
     }).catch(error => {
-        // Même chose ici - traiter comme une liste vide
+        // Same here - treat as empty list
         logger.debug(`listArduinoBoards catch (no boards connected): ${error.message || error}`);
         const hasChanges = previousBoards.length > 0;
         previousBoards = [];
@@ -1236,25 +1245,25 @@ app.whenReady().then(() => {
         }
     });
 
-    // Initial language setup : langue mémorisée si présente, sinon langue système
+    // Initial language setup: use saved locale if present, otherwise system locale
     const savedLocale = getSavedLocale();
     const initialLocale = (savedLocale === 'fr' || savedLocale === 'en') ? savedLocale : systemLocale;
     switchLanguage(initialLocale);
 
-    // Vérifier les binaires requis au démarrage
+    // Check required binaries at startup
     const mainWindow = getMainWindow();
     checkRequiredBinaries(mainWindow);
 
-    // Initialiser l'état des icônes au démarrage
+    // Initialize icon state at startup
     updateBoardStatusIcons();
 
-    // Détection des cartes Arduino (une fois au démarrage, puis à intervalle)
+    // Arduino board detection (once at startup, then at interval)
     listArduinoBoards(mainWindow).catch(() => {});
     boardDetectionInterval = setInterval(() => {
         listArduinoBoards(mainWindow).catch(() => {});
     }, DETECTION_INTERVAL);
 
-    // Détection des lecteurs micro:bit (une fois au démarrage, puis à intervalle)
+    // micro:bit drive detection (once at startup, then at interval)
     listMicrobitDrives(mainWindow);
     microbitDetectionInterval = setInterval(() => {
         listMicrobitDrives(mainWindow);
