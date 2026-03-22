@@ -1,20 +1,23 @@
 /**
- * @file notifications.js
- * @description Notification display in the main window: injects a div with configurable
- * style and duration (CONSTANTS). Used by menu, Arduino CLI, micro:bit, etc.
+ * @file notifications.ts
+ * @description Notifications toast dans la page Tinkercad : exécute du JS dans le webview pour injecter
+ * un bandeau temporaire (durée et délai définis dans `CONSTANTS`).
+ * @remarks Toute chaîne utilisateur doit rester raisonnable en longueur ; les retours ligne sont échappés pour le script injecté.
  * @module lib/notifications
- * @author Sébastien Canet
- * @license CC0-1.0
+ * @author scanet\@libreduc.cc (Sébastien Canet)
+ * @license GPL-3.0
  */
 
 import { CONSTANTS } from './constants.js';
 
+import type { BrowserWindow } from 'electron';
+
 /**
- * Shows a message as a notification overlay in the window (CSS + div injection).
- * @param {Electron.BrowserWindow|null} browserWindow - Window in which to inject the notification
- * @param {string} message - Text to display (escaped for JavaScript)
+ * Affiche un message en overlay dans le contenu chargé (page Tinkercad).
+ * @param browserWindow - Fenêtre cible (webview chargée)
+ * @param message - Texte brut ; certains caractères sont échappés pour l’injection JS
  */
-function showNotification(browserWindow, message) {
+function showNotification(browserWindow: BrowserWindow | null, message: string): void {
     if (!browserWindow || !message) return;
     const escapedMessage = message.replace(/[\\"']/g, '\\$&').replace(/\n/g, '\\n');
     const delay = CONSTANTS.NOTIFICATION_DELAY;

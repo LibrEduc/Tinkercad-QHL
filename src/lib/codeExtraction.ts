@@ -1,11 +1,12 @@
 /**
- * @file codeExtraction.js
- * @description Code extraction from the Tinkercad editor (webview / CodeMirror). Builds a script
- * injected into the page to read editor content (CodeMirror / cm-editor selectors), normalizes
- * Unicode. Exposes CODE_EXTRACTION_SCRIPT, executeScriptInWebview, extractCodeFromEditor, normalizeUnicode.
+ * @file codeExtraction.ts
+ * @description Extraction du code depuis l’éditeur Tinkercad (webview) : script injecté ciblant CodeMirror
+ * ou sélecteurs équivalents, puis normalisation Unicode pour éviter les caractères « typographiques »
+ * qui cassent Python/Arduino.
+ * @remarks Si Tinkercad change son DOM, adapter les sélecteurs dans `buildCodeExtractionScript`.
  * @module lib/codeExtraction
- * @author Sébastien Canet
- * @license CC0-1.0
+ * @author scanet\@libreduc.cc (Sébastien Canet)
+ * @license GPL-3.0
  */
 
 import { webContents } from 'electron';
@@ -13,11 +14,10 @@ import { CONSTANTS } from './constants.js';
 import { logger } from './logger.js';
 
 /**
- * Builds the IIFE script injected into the webview to extract editor text.
- * @param {string} emptyCode - Fallback value if no editor found (e.g. CONSTANTS.EMPTY_CODE)
- * @returns {string} JavaScript code to execute in the page
+ * Construit le script IIFE exécuté dans la page pour lire le texte de l’éditeur.
+ * @param emptyCode - Valeur renvoyée si aucun éditeur détecté (ex. `CONSTANTS.EMPTY_CODE`)
  */
-function buildCodeExtractionScript(emptyCode) {
+function buildCodeExtractionScript(emptyCode: string): string {
     return `
     (() => {
         let editorElement = document.querySelector('.CodeMirror-code');
@@ -60,12 +60,10 @@ function buildCodeExtractionScript(emptyCode) {
 const CODE_EXTRACTION_SCRIPT = buildCodeExtractionScript(CONSTANTS.EMPTY_CODE);
 
 /**
- * Normalizes Unicode characters (smart quotes, dashes, non-breaking spaces, zero-width characters).
- * @param {string} text - Source text
- * @param {Object} [options] - useNFKC, removeZeroWidth (default true)
- * @returns {string} Normalized text
+ * Normalise les guillemets, tirets, espaces insécables et caractères de largeur nulle.
+ * @param options - `useNFKC` et `removeZeroWidth` (défaut true)
  */
-function normalizeUnicode(text, options = {}) {
+function normalizeUnicode(text: string, options: Record<string, unknown> = {}): string {
     let normalized = text;
     if (options.useNFKC !== false) normalized = normalized.normalize('NFKC');
     normalized = normalized.replace(/[\u2018\u2019\u201C\u201D]/g, '"');
@@ -76,13 +74,10 @@ function normalizeUnicode(text, options = {}) {
 }
 
 /**
- * Executes a script in a webContents whose URL contains tinkercad.com, or otherwise in browserWindow.
- * Waits for document.readyState === 'complete' before executing on the Tinkercad page.
- * @param {Electron.BrowserWindow} browserWindow - Host window
- * @param {string} script - JavaScript code to evaluate
- * @returns {Promise<*>} Evaluation result (or CONSTANTS.EMPTY_CODE on error)
+ * Exécute du JS dans le webview Tinkercad (URL contenant `tinkercad.com`) si possible, sinon dans la fenêtre.
+ * Attend le chargement complet avant évaluation sur la page Tinkercad.
  */
-async function executeScriptInWebview(browserWindow, script) {
+async function executeScriptInWebview(browserWindow: Electron.BrowserWindow, script: string): Promise<unknown> {
     try {
         const allWebContents = webContents.getAllWebContents();
         for (const wc of allWebContents) {
@@ -111,15 +106,13 @@ async function executeScriptInWebview(browserWindow, script) {
 }
 
 /**
- * Extracts code from the Tinkercad editor (webview), with optional Unicode normalization.
- * @param {Electron.BrowserWindow} browserWindow - Window containing the Tinkercad webview
- * @param {Object} [options] - useAdvancedSelectors, normalizeUnicode (default true)
- * @returns {Promise<string>} Extracted code or CONSTANTS.EMPTY_CODE
+ * Récupère le code source affiché dans l’éditeur ; optionnellement applique `normalizeUnicode` (NFKC selon `useAdvancedSelectors`).
  */
-async function extractCodeFromEditor(browserWindow, options = {}) {
+async function extractCodeFromEditor(browserWindow: Electron.BrowserWindow, options: Record<string, unknown> = {}): Promise<string> {
     const { useAdvancedSelectors = true, normalizeUnicode: shouldNormalize = true } = options;
     try {
-        const code = await executeScriptInWebview(browserWindow, CODE_EXTRACTION_SCRIPT);
+        const raw = await executeScriptInWebview(browserWindow, CODE_EXTRACTION_SCRIPT);
+        const code = typeof raw === 'string' ? raw : '';
         if (!code || code === CONSTANTS.EMPTY_CODE) return CONSTANTS.EMPTY_CODE;
         if (shouldNormalize) return normalizeUnicode(code, { useNFKC: useAdvancedSelectors });
         return code;

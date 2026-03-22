@@ -1,10 +1,11 @@
 /**
- * @file logger.js
- * @description Unified logging: console + file (data/debug.log) when TINKERCAD_DEBUG=1 or debug-mode.js.
- * Exposes logger (debug, info, warn, error), logFile and DEBUG_FILE_LOGGING.
+ * @file logger.ts
+ * @description Journalisation unifiée : console toujours ; fichier `data/debug.log` si `TINKERCAD_DEBUG=1`
+ * ou si `debug-mode.ts` exporte `true`.
+ * @remarks Les messages d’erreur utilisateur passent plutôt par `notifications.ts` ; le logger sert au diagnostic.
  * @module lib/logger
- * @author Sébastien Canet
- * @license CC0-1.0
+ * @author scanet\@libreduc.cc (Sébastien Canet)
+ * @license GPL-3.0
  */
 
 import path from 'node:path';
@@ -24,11 +25,11 @@ const logFile = path.join(getPortableDataDir(), 'debug.log');
 const logStream = DEBUG_FILE_LOGGING ? fs.createWriteStream(logFile, { flags: 'a' }) : null;
 
 /**
- * Writes a message to the file stream (if active) and to the console according to the level.
- * @param {string} level - 'DEBUG' | 'INFO' | 'WARN' | 'ERROR'
- * @param {...*} args - Arguments passed to console.log/warn/error
+ * Écrit une ligne horodatée dans le fichier (si actif) et affiche sur la console selon le niveau.
+ * @param level - Niveau logique (`DEBUG`, `INFO`, `WARN`, `ERROR`)
+ * @param args - Valeurs à sérialiser (objets en JSON indenté)
  */
-function writeLog(level, ...args) {
+function writeLog(level: string, ...args: unknown[]): void {
     const timestamp = new Date().toISOString();
     const message = `[${timestamp}] [${level}] ${args.map(arg =>
         typeof arg === 'object' ? JSON.stringify(arg, null, 2) : String(arg)

@@ -1,34 +1,31 @@
 /**
- * @file boardDetection.js
- * @description Arduino board detection (multi-OS): parses "arduino-cli board list --json" output
- * (or plain text fallback), extracts port.address and port.properties.vid, excludes micro:bit ports (VID 0D28)
- * from the Arduino menu. Provides parseBoardListJson, parseBoardListText, buildArduinoMenuList, boardListsEqual.
+ * @file boardDetection.ts
+ * @description Analyse la sortie de `arduino-cli board list` (JSON ou texte) pour alimenter le menu « ports ».
+ * Exclut les ports dont le VID correspond au micro:bit (`0D28`) pour éviter les doublons avec le menu micro:bit.
  * @module lib/boardDetection
- * @author Sébastien Canet
- * @license CC0-1.0
+ * @author scanet\@libreduc.cc (Sébastien Canet)
+ * @license GPL-3.0
  */
 
-/** micro:bit USB VID; ports with this VID are excluded from the Arduino menu. */
+/** VID USB du micro:bit : ces ports ne figurent pas dans le menu Arduino. */
 const MICROBIT_VID = '0D28';
 
+export type ParsedPort = { address: string; vid: string | null };
+export type BoardMenuEntry = { port: string; boardName: string };
+
 /**
- * Normalizes a VID (0x0D28, 0D28 → 0D28).
- * @param {*} v - Raw value (string or number)
- * @returns {string|null} VID in uppercase without 0x prefix, or null
+ * Normalise un identifiant vendeur USB (`0x0D28`, `0D28` → `0D28`).
  */
-function normalizeVid(v) {
+function normalizeVid(v: unknown): string | null {
     if (v == null || v === '') return null;
     const s = String(v).toUpperCase().replace(/^0X/, '').trim();
     return s || null;
 }
 
 /**
- * Recursively searches a JSON object for the ports array (elements with address or port.address).
- * @param {*} obj - Object or array parsed from arduino-cli board list --json
- * @param {number} [depth=0] - Max depth to avoid infinite recursion
- * @returns {Array|null} Ports array or null
+ * Parcourt le JSON renvoyé par le CLI pour trouver un tableau de ports (formes variables selon les versions).
  */
-function findPortsArray(obj, depth = 0) {
+function findPortsArray(obj: unknown, depth = 0): unknown[] | null {
     if (depth > 5) return null;
     if (Array.isArray(obj) && obj.length > 0) {
         const first = obj[0];
@@ -44,12 +41,9 @@ function findPortsArray(obj, depth = 0) {
 }
 
 /**
- * Parses "arduino-cli board list --json" output.
- * Only collects port.address and port.properties.vid for each item.
- * @param {string} stdout - Command output
- * @returns {Array} Array of { address: string, vid: string|null }
+ * Parse la sortie `--json` : extrait adresse de port et VID pour chaque entrée.
  */
-function parseBoardListJson(stdout) {
+function parseBoardListJson(stdout: string): ParsedPort[] {
     const result = [];
     try {
         const raw = stdout.trim();
@@ -75,12 +69,9 @@ function parseBoardListJson(stdout) {
 }
 
 /**
- * From the parsed list (address + vid), we only exclude when VID is explicitly 0D28 (micro:bit).
- * If VID is absent or different from 0D28, the port is added to the menu.
- * @param {Array} parsed - Array of { address: string, vid: string|null }
- * @returns {Array} Array of { port: string, boardName: string }
+ * Filtre les ports micro:bit puis projette en entrées de menu (libellé = port pour l’instant).
  */
-function buildArduinoMenuList(parsed) {
+function buildArduinoMenuList(parsed: ParsedPort[]): BoardMenuEntry[] {
     return parsed
         .filter(({ vid }) => {
             if (vid == null || vid === '') return true;
@@ -90,12 +81,9 @@ function buildArduinoMenuList(parsed) {
 }
 
 /**
- * Compares two board lists (by port only).
- * @param {Array} a - First list ({ port, boardName }[])
- * @param {Array} b - Second list
- * @returns {boolean} true if same ports in the same order
+ * Égalité des listes de cartes : même ports dans le même ordre.
  */
-function boardListsEqual(a, b) {
+function boardListsEqual(a: BoardMenuEntry[], b: BoardMenuEntry[]): boolean {
     if (a.length !== b.length) return false;
     for (let i = 0; i < a.length; i++) {
         if (a[i].port !== b[i].port) return false;
@@ -107,12 +95,9 @@ function boardListsEqual(a, b) {
 const PORT_REGEX = /^(COM\d+|\/dev\/tty[A-Z0-9]+|\/dev\/cu\.[^\s]+)$/i;
 
 /**
- * Fallback: parses plain TEXT output of "board list" (without --json). First column = port if COM/dev format.
- * vid = null so all ports are kept in the menu.
- * @param {string} stdout - Raw arduino-cli board list output
- * @returns {Array} Array of { address: string, vid: string|null }
+ * Secours si le JSON est vide ou invalide : première colonne = port si format COM / tty reconnu ; VID inconnu.
  */
-function parseBoardListText(stdout) {
+function parseBoardListText(stdout: string): ParsedPort[] {
     const result = [];
     const lines = stdout.split(/\n/).map(l => l.trim()).filter(Boolean);
     for (let i = 0; i < lines.length; i++) {

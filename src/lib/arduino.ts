@@ -1,16 +1,19 @@
 /**
- * @file arduino.js
- * @description Arduino CLI logic: command building, execution (exec/execFile), archive download
- * and extraction, YAML config, AVR core installation, sketch compile and upload.
- * Used by index.js (Arduino menu, upload).
+ * @file arduino.ts
+ * @description Intégration **Arduino CLI** : construction de la ligne de commande, exécution (`exec` / `execFile`),
+ * téléchargement et extraction de l’archive officielle, création du `arduino-cli.yaml`, installation du core
+ * `arduino:avr`, écriture du sketch et enchaînement `compile` + `upload`.
+ * @remarks Le répertoire courant pour les commandes `arduino-cli` doit rester le dossier de config (YAML)
+ * pour que les chemins relatifs (`data`, `sketchbook`) coïncident avec l’installation du core.
  * @module lib/arduino
- * @author Sébastien Canet
- * @license CC0-1.0
+ * @author scanet\@libreduc.cc (Sébastien Canet)
+ * @license GPL-3.0
  */
 
 import path from 'node:path';
 import fs from 'fs';
 import { exec, execSync, execFile } from 'child_process';
+import type { BrowserWindow } from 'electron';
 import { PATHS, directory, isDev, getPortableDataDir, ensurePortableDataDir } from './paths.js';
 import { isWindows, isMac } from './platform.js';
 import { logger, logFile } from './logger.js';
@@ -19,12 +22,22 @@ import { getLatestArduinoCliVersion } from './github.js';
 import { downloadToFile } from './download.js';
 import { safeUnlink } from './utils.js';
 
+/** Options pour les commandes shell lancées depuis l’UI (notifications, succès/erreur, répertoire de travail). */
+export interface ExecCommandOptions {
+    onSuccess?: (stdout: string, stderr: string) => void;
+    onError?: (error: Error) => void;
+    showProgress?: string | null;
+    showSuccess?: string | null;
+    showError?: string | null;
+    browserWindow?: BrowserWindow | null;
+    cwd?: string | null;
+}
+
 /**
- * Builds the full command line for arduino-cli (executable + --config-file if present).
- * @param {string} arduinoCommand - Subcommand and arguments (e.g. "compile --fqbn arduino:avr:uno sketch")
- * @returns {string} Full command with quoted paths
+ * Construit la ligne complète pour invoquer `arduino-cli` (binaire + `--config-file` si le YAML existe).
+ * @param arduinoCommand - Sous-commande et arguments, ex. `compile --fqbn arduino:avr:uno "chemin/sketch"`
  */
-function buildArduinoCliCommand(arduinoCommand) {
+function buildArduinoCliCommand(arduinoCommand: string): string {
     const configFile = PATHS.arduinoConfig;
     if (fs.existsSync(configFile)) {
         return `"${PATHS.arduinoCli}" --config-file "${configFile}" ${arduinoCommand}`;
@@ -33,11 +46,9 @@ function buildArduinoCliCommand(arduinoCommand) {
 }
 
 /**
- * Parses a command whose executable is in quotes; returns { executable, args } or null.
- * @param {string} command - String like "path/to/exe" arg1 arg2
- * @returns {{ executable: string, args: string[] }|null}
+ * Si la commande commence par un chemin entre guillemets, le sépare du reste pour utiliser `execFile` (sans shell).
  */
-function parseQuotedCommand(command) {
+function parseQuotedCommand(command: string): { executable: string; args: string[] } | null {
     if (!command.startsWith('"') || !command.includes('"', 1)) return null;
     const endQuote = command.indexOf('"', 1);
     const executable = command.substring(1, endQuote);
@@ -57,13 +68,10 @@ function parseQuotedCommand(command) {
 }
 
 /**
- * Executes a command (string or executable + args). If the command starts with a quoted path,
- * uses execFile to avoid escaping issues; otherwise exec with cwd.
- * @param {string} command - Full command line
- * @param {Object} [options] - browserWindow, cwd, showProgress, showSuccess, showError, onError, onSuccess
- * @returns {Promise<{ stdout: string, stderr: string }>}
+ * Exécute une commande shell (ou `execFile` si le binaire est en tête entre guillemets).
+ * Les callbacks `onSuccess` / `onError` reçoivent la sortie standard ; les notifications utilisent les clés `show*`.
  */
-function execCommand(command, options = {}) {
+function execCommand(command: string, options: ExecCommandOptions = {}): Promise<{ stdout: string; stderr: string }> {
     const {
         onSuccess = () => {},
         onError = (error) => logger.error(`Command failed: ${error}`),
@@ -126,11 +134,8 @@ function execCommand(command, options = {}) {
     });
 }
 
-/**
- * Makes a file executable (chmod +x) on Linux/macOS; no-op on Windows.
- * @param {string} filePath - Path to the executable
- */
-function makeExecutable(filePath) {
+/** Rend le binaire exécutable sur Unix ; sans effet sous Windows. */
+function makeExecutable(filePath: string): void {
     if (!isWindows) {
         try {
             fs.chmodSync(filePath, 0o755);
@@ -146,10 +151,10 @@ function makeExecutable(filePath) {
 }
 
 /**
- * Creates the default arduino-cli.yaml file if it does not exist (board_manager, directories, etc.).
- * @param {string} configPath - Path to arduino-cli.yaml
+ * Crée le fichier `arduino-cli.yaml` par défaut s’il n’existe pas (board_manager, répertoires, etc.).
+ * @param configPath - Chemin absolu vers `arduino-cli.yaml`
  */
-function ensureArduinoCliConfig(configPath) {
+function ensureArduinoCliConfig(configPath: string): void {
     if (fs.existsSync(configPath)) return;
     try {
         const configDir = path.dirname(configPath);
@@ -177,12 +182,8 @@ logging:
     }
 }
 
-/**
- * Returns the Arduino CLI archive download URL for the current platform.
- * @param {string} version - Version (e.g. "0.35.0")
- * @returns {string} GitHub releases URL
- */
-function buildArduinoCliDownloadUrl(version) {
+/** URL de l’archive ZIP/TAR officielle Arduino CLI pour l’OS courant et une version donnée. */
+function buildArduinoCliDownloadUrl(version: string): string {
     let filename;
     if (isWindows) filename = `arduino-cli_${version}_Windows_64bit.zip`;
     else if (isMac) filename = `arduino-cli_${version}_macOS_64bit.tar.gz`;
@@ -190,15 +191,13 @@ function buildArduinoCliDownloadUrl(version) {
     return `https://github.com/arduino/arduino-cli/releases/download/v${version}/${filename}`;
 }
 
-/**
- * Extracts the Arduino CLI archive (PowerShell Expand-Archive on Windows, tar on Unix).
- * @param {string} tempArchive - Archive path
- * @param {string} destDir - Destination directory
- * @param {Electron.BrowserWindow|null} browserWindow - For displaying errors
- * @param {Object} [t] - Translations (file.installArduino.notifications, errors)
- * @returns {Promise<void>}
- */
-function extractArduinoArchive(tempArchive, destDir, browserWindow, t) {
+/** Décompresse l’archive dans `destDir` (PowerShell sous Windows, `tar` ailleurs). */
+function extractArduinoArchive(
+    tempArchive: string,
+    destDir: string,
+    browserWindow: BrowserWindow | null,
+    t: Record<string, any> | undefined
+): Promise<void> {
     return new Promise((resolve, reject) => {
         if (isWindows) {
             const psScript = `Expand-Archive -Path "${tempArchive}" -DestinationPath "${destDir}" -Force`;
@@ -212,7 +211,7 @@ function extractArduinoArchive(tempArchive, destDir, browserWindow, t) {
                         showNotification(browserWindow, `${t.file.installArduino.notifications.errorPowerShell}: ${errorMsg}\n\n${logFile}`);
                     }
                     reject(error);
-                } else resolve();
+                } else resolve(undefined);
             });
         } else {
             const command = `tar -xzf "${tempArchive}" -C "${destDir}"`;
@@ -220,23 +219,23 @@ function extractArduinoArchive(tempArchive, destDir, browserWindow, t) {
             exec(command, (error, stdout, stderr) => {
                 if (stderr) logger.debug('Tar stderr:', stderr);
                 if (error) reject(error);
-                else resolve();
+                else resolve(undefined);
             });
         }
     });
 }
 
 /**
- * Downloads the Arduino CLI archive, extracts it, makes the binary executable, creates config and installs AVR core.
- * @param {string} downloadUrl - Archive URL
- * @param {string} arduinoDir - Target directory (containing arduino-cli)
- * @param {string} arduinoCliPath - Final path of the executable
- * @param {string} configPath - Path to arduino-cli.yaml
- * @param {Electron.BrowserWindow|null} browserWindow - For notifications
- * @param {Object} [t] - Translations
- * @returns {Promise<boolean>} true on success
+ * Télécharge l’archive CLI, extrait, pose les permissions, crée le YAML et tente d’installer le core AVR.
  */
-async function downloadAndExtractArduinoCli(downloadUrl, arduinoDir, arduinoCliPath, configPath, browserWindow, t) {
+async function downloadAndExtractArduinoCli(
+    downloadUrl: string,
+    arduinoDir: string,
+    arduinoCliPath: string,
+    configPath: string,
+    browserWindow: BrowserWindow | null,
+    t: Record<string, any> | undefined
+): Promise<boolean> {
     const archiveExt = isWindows ? '.zip' : '.tar.gz';
     const tempArchive = path.join(arduinoDir, `arduino-cli_temp${archiveExt}`);
     const downloadingLabel = t.file?.installArduino?.notifications?.downloading || 'Downloading...';
@@ -283,13 +282,14 @@ async function downloadAndExtractArduinoCli(downloadUrl, arduinoDir, arduinoCliP
 }
 
 /**
- * Ensures Arduino CLI is present; if missing and autoDownload, downloads and installs (including AVR core).
- * @param {Electron.BrowserWindow|null} browserWindow - For notifications
- * @param {boolean} [autoDownload=true] - If true, triggers download when binary is missing
- * @param {Object} [t] - Translations (file.installArduino, errors)
- * @returns {Promise<boolean>} true if arduino-cli is available
+ * Garantit la présence d’`arduino-cli` : si absent et `autoDownload`, télécharge la dernière release GitHub
+ * puis installe le core AVR via `ensureArduinoAvrCore`.
  */
-async function ensureArduinoCli(browserWindow, autoDownload = true, t) {
+async function ensureArduinoCli(
+    browserWindow: BrowserWindow | null,
+    autoDownload = true,
+    t?: Record<string, any>
+): Promise<boolean> {
     if (!t) t = {};
     logger.debug('ensureArduinoCli called', { autoDownload, hasWindow: !!browserWindow });
     try {
@@ -351,12 +351,8 @@ async function ensureArduinoCli(browserWindow, autoDownload = true, t) {
     }
 }
 
-/**
- * Installs arduino:avr core if needed (arduino-cli core install arduino:avr), cwd = config directory.
- * @param {Electron.BrowserWindow|null} browserWindow - For progress notification
- * @param {Object} [t] - Translations (file.installArduino.notifications.installingCoreAvr)
- */
-async function ensureArduinoAvrCore(browserWindow, t) {
+/** Installe le core `arduino:avr` si nécessaire (répertoire de travail = dossier du config YAML). */
+async function ensureArduinoAvrCore(browserWindow: BrowserWindow | null, t?: Record<string, any>): Promise<void> {
     const configDir = path.dirname(PATHS.arduinoConfig);
     const progressMsg = t?.file?.installArduino?.notifications?.installingCoreAvr || 'Installation arduino:avr...';
     try {
@@ -372,15 +368,15 @@ async function ensureArduinoAvrCore(browserWindow, t) {
 }
 
 /**
- * Writes code to the sketch (data/arduino/sketch/sketch.ino), compiles then uploads to the given port.
- * Uses the arduino-cli config directory as cwd so the AVR core is found.
- * @param {string} code - Sketch source code
- * @param {string} port - Serial port (e.g. COM3, /dev/ttyACM0)
- * @param {Electron.BrowserWindow|null} browserWindow - For notifications
- * @param {Object} [t] - Translations (compileCode, uploadCode, errors)
- * @returns {Promise<void>}
+ * Écrit le sketch dans `sketch.ino`, lance `compile` puis `upload` sur le port série.
+ * Le répertoire courant pour les deux commandes est le dossier parent du `arduino-cli.yaml`.
  */
-async function compileAndUploadArduino(code, port, browserWindow, t) {
+async function compileAndUploadArduino(
+    code: string,
+    port: string,
+    browserWindow: BrowserWindow | null,
+    t?: Record<string, any>
+): Promise<void> {
     if (!t) t = {};
     const arduinoCliAvailable = await ensureArduinoCli(browserWindow, true, t);
     if (!arduinoCliAvailable) {

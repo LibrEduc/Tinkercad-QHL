@@ -1,10 +1,11 @@
 /**
- * @file fileCache.js
- * @description Cache for file existence checks (fs.existsSync) with TTL and FIFO eviction.
- * Reduces disk calls for repeated checks (micro:bit HEX, etc.). Exposes createFileCache and fileCache.
+ * @file fileCache.ts
+ * @description Cache mémoire des résultats de `fs.existsSync` avec TTL et éviction FIFO.
+ * Limite les accès disque répétés (HEX micro:bit, chemins ressources).
+ * @remarks Après création/suppression de fichiers, appeler `invalidate` sur le chemin concerné.
  * @module lib/fileCache
- * @author Sébastien Canet
- * @license CC0-1.0
+ * @author scanet\@libreduc.cc (Sébastien Canet)
+ * @license GPL-3.0
  */
 
 import fs from 'fs';
@@ -12,12 +13,13 @@ import fs from 'fs';
 const DEFAULT_MAX_ENTRIES = 500;
 const DEFAULT_TTL_MS = 5000;
 
+export type FileCache = ReturnType<typeof createFileCache>;
+
 /**
- * Creates a cache that memoizes fs.existsSync(path) with TTL and FIFO eviction.
- * @param {Object} [options] - maxEntries (default 500), ttl in ms (default 5000)
- * @returns {Object} Object { exists(path), invalidate(path), clear() }
+ * Fabrique un cache avec `exists`, `invalidate` et `clear`.
+ * @param options - `maxEntries` (défaut 500), `ttl` en ms (défaut 5000)
  */
-function createFileCache(options = {}) {
+function createFileCache(options: { maxEntries?: number; ttl?: number } = {}) {
     const maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES;
     const ttl = options.ttl ?? DEFAULT_TTL_MS;
 
@@ -36,7 +38,7 @@ function createFileCache(options = {}) {
         }
     }
 
-    function exists(path) {
+    function exists(path: string): boolean {
         const now = Date.now();
         const cached = _cache.get(path);
         const timestamp = _timestamps.get(path);
@@ -55,7 +57,7 @@ function createFileCache(options = {}) {
         return result;
     }
 
-    function invalidate(path) {
+    function invalidate(path: string): void {
         _cache.delete(path);
         _timestamps.delete(path);
         const idx = _order.indexOf(path);

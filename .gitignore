@@ -1,6 +1,9 @@
 # Build Electron (electron-builder)
 dist/
 
+# Sortie TypeScript (npm run compile)
+out/
+
 # Dépendances
 node_modules/
 

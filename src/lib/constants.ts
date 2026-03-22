@@ -1,13 +1,15 @@
 /**
- * @file constants.js
- * @description Shared constants: magic strings, delays, MakeCode Python regexes,
- * micro:bit patterns. Used by codeExtraction, microbitConversion, arduino, index, etc.
+ * @file constants.ts
+ * @description Constantes partagées : valeurs « magiques » (code vide, noms de fichiers), délais UI,
+ * intervalle de scan des cartes, motifs de détection micro:bit, patterns MakeCode et `REGEX_MAKECODE`
+ * pour la conversion vers MicroPython.
+ * @remarks Pour ajouter un motif MakeCode : étendre `MAKECODE_PATTERNS` / `REGEX_MAKECODE` et la logique dans `microbitConversion.ts`.
  * @module lib/constants
- * @author Sébastien Canet
- * @license CC0-1.0
+ * @author scanet\@libreduc.cc (Sébastien Canet)
+ * @license GPL-3.0
  */
 
-/** General constants (empty code, file names, UI delays). */
+/** Chaînes et délais utilisés dans toute l’app (notifications, fichier HEX sur la carte, etc.). */
 const CONSTANTS = {
     EMPTY_CODE: 'empty',
     PROGRAM_HEX_FILENAME: 'PROGRAM.HEX',

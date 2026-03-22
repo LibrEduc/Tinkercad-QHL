@@ -1,19 +1,26 @@
 /**
- * @file menu.js
- * @description Electron application menu construction (File, Arduino, micro:bit, View, Help).
- * Uses a context object provided by index.js (getMenuContext) to avoid circular dependencies.
- * Each submenu is created by a function (createFileMenu, createArduinoMenu, etc.).
+ * @file menu.ts
+ * @description Construction du menu applicatif Electron : **Fichier**, **Arduino**, **micro:bit**, **Affichage**, **Aide**.
+ * Toute action dépend d’un **contexte** fourni par `getMenuContext()` dans `index.ts` (pas d’import direct de `index` ici).
+ * @remarks Pour ajouter une entrée : créer une fonction `createXMenu` locale ou étendre une existante, puis l’ajouter au tableau retourné.
  * @module lib/menu
- * @author Sébastien Canet
- * @license CC0-1.0
+ * @author scanet\@libreduc.cc (Sébastien Canet)
+ * @license GPL-3.0
  */
 
+import type { MenuItemConstructorOptions } from 'electron';
+
 /**
- * Builds the application menu template for Menu.buildFromTemplate().
- * @param {Object} ctx - Context: t (translations.menu), locale, getMainWindow, showNotification, path, directory, iconPath, BrowserWindow, Menu, clipboard, logger, dialog, shell, getters/setters (port, board, microbitDrive), previousBoards, previousMicrobitDrives, runArduinoUploadFlow, runMicrobitUploadFlow, switchLanguage, buildArduinoCliCommand, execCommand, ensureArduinoCli, translations, executeScriptInWebview, CODE_EXTRACTION_SCRIPT, CONSTANTS, cleanPythonCode, isMakeCodePython, convertMakeCodeToMicroPython, validatePythonSyntaxWithDisplay, showConvertedCodeWindow, installMicroPythonRuntimes, checkForUpdates, packageInfo
- * @returns {Object[]} Array of menu descriptors (label, submenu, click, etc.)
+ * Contexte fourni par `getMenuContext()` dans le processus principal (index).
+ * `Record<string, any>` permet d’accéder aux traductions imbriquées sans dupliquer tout le schéma JSON.
  */
-function buildApplicationMenu(ctx) {
+export type MenuBuilderContext = Record<string, any>;
+
+/**
+ * Assemble les sous-menus et retourne un tableau compatible avec `Menu.buildFromTemplate()`.
+ * Les handlers utilisent `ctx` pour ports sélectionnés, téléversement, installation CLI/HEX, etc.
+ */
+function buildApplicationMenu(ctx: MenuBuilderContext) {
     const {
         t,
         locale,
@@ -51,11 +58,14 @@ function buildApplicationMenu(ctx) {
     } = ctx;
 
     const getPort = () => (typeof ctx.getSelectedPort === 'function' ? ctx.getSelectedPort() : ctx.selectedPort);
-    const setPort = (v) => (typeof ctx.setSelectedPort === 'function' ? ctx.setSelectedPort(v) : (ctx.selectedPort = v));
-    const getBoard = () => (typeof ctx.getSelectedBoard === 'function' ? ctx.getSelectedBoard() : ctx.selectedBoard);
-    const setBoard = (v) => (typeof ctx.setSelectedBoard === 'function' ? ctx.setSelectedBoard(v) : (ctx.selectedBoard = v));
-    const getMicrobitDrive = () => (typeof ctx.getSelectedMicrobitDrive === 'function' ? ctx.getSelectedMicrobitDrive() : ctx.selectedMicrobitDrive);
-    const setMicrobitDrive = (v) => (typeof ctx.setSelectedMicrobitDrive === 'function' ? ctx.setSelectedMicrobitDrive(v) : (ctx.selectedMicrobitDrive = v));
+    const setPort = (v: string | null) =>
+        typeof ctx.setSelectedPort === 'function' ? ctx.setSelectedPort(v) : (ctx.selectedPort = v);
+    const setBoard = (v: string | null) =>
+        typeof ctx.setSelectedBoard === 'function' ? ctx.setSelectedBoard(v) : (ctx.selectedBoard = v);
+    const getMicrobitDrive = () =>
+        typeof ctx.getSelectedMicrobitDrive === 'function' ? ctx.getSelectedMicrobitDrive() : ctx.selectedMicrobitDrive;
+    const setMicrobitDrive = (v: string | null) =>
+        typeof ctx.setSelectedMicrobitDrive === 'function' ? ctx.setSelectedMicrobitDrive(v) : (ctx.selectedMicrobitDrive = v);
 
     function createFileMenu() {
         return {
@@ -328,7 +338,7 @@ function buildApplicationMenu(ctx) {
         createMicrobitMenu(),
         createViewMenu(),
         createHelpMenu()
-    ];
+    ] as MenuItemConstructorOptions[];
 }
 
 export {

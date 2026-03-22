@@ -1,11 +1,14 @@
+import type { BrowserWindow } from 'electron';
+
 /**
- * @file pythonUtils.js
- * @description Utilities for Python / MicroPython code: cleaning (line endings, tabs, blank lines),
- * syntax validation (parentheses, indentation, music/radio imports). Used by the "Show converted code" menu
- * and the micro:bit compile flow.
+ * @file pythonUtils.ts
+ * @description Utilitaires autour du code Python / MicroPython : nettoyage (fins de ligne, indentation),
+ * validation heuristique (parenthèses, indentation après `:`, imports `music` / `radio`).
+ * Utilisé par le menu « code converti » et le flux de téléversement micro:bit.
+ * @remarks Ce n’est pas un parseur Python complet ; il complète l’expérience utilisateur avant flash HEX.
  * @module lib/pythonUtils
- * @author Sébastien Canet
- * @license CC0-1.0
+ * @author scanet\@libreduc.cc (Sébastien Canet)
+ * @license GPL-3.0
  */
 
 const DEFAULT_VALIDATION_MESSAGES = {
@@ -20,12 +23,10 @@ const DEFAULT_VALIDATION_MESSAGES = {
 };
 
 /**
- * Cleans and normalizes Python code: line endings, indentation, trailing spaces,
- * multiple blank lines, final newline.
- * @param {string} code - Python code to clean
- * @returns {string} Cleaned code
+ * Nettoie le code utilisateur : fins de ligne, tabs → espaces, lignes vides multiples, newline finale.
+ * Accepte toute valeur ; les non-chaînes produisent `''` (appels défensifs depuis le renderer).
  */
-function cleanPythonCode(code) {
+function cleanPythonCode(code: unknown): string {
     if (code == null || typeof code !== 'string') return '';
     // Normalize line endings
     let cleaned = code.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
@@ -42,13 +43,13 @@ function cleanPythonCode(code) {
     return cleaned;
 }
 
+export type PythonSyntaxIssue = { line: number; message: string };
+
 /**
- * Validates Python syntax (parentheses, indentation, imports).
- * @param {string} code - Python code to validate
- * @param {Object} [messages] - Error labels (otherwise default English messages)
- * @returns {Array<{line: number, message: string}>} Array of errors
+ * Contrôles légers : équilibre (), [], {}, indentation après `:`, présence d’imports si `music.` / `radio.`.
+ * @param messages - Libellés d’erreur (fusion avec `DEFAULT_VALIDATION_MESSAGES`)
  */
-function validatePythonSyntax(code, messages = {}) {
+function validatePythonSyntax(code: string, messages: Record<string, string> = {}): PythonSyntaxIssue[] {
     const msg = { ...DEFAULT_VALIDATION_MESSAGES, ...messages };
     const errors = [];
     const lines = code.split('\n');
@@ -117,20 +118,20 @@ function validatePythonSyntax(code, messages = {}) {
 }
 
 /**
- * Validates code and shows errors via a notification if a window is provided.
- * @param {string} code - Python code to validate
- * @param {Object|null} browserWindow - Window to show the notification in
- * @param {Object} [messages] - Labels (errorLine, validationErrors + validatePythonSyntax)
- * @param {function} [showNotificationFn] - (window, message) => void
- * @returns {Array<{line: number, message: string}>} Array of errors
+ * Comme `validatePythonSyntax`, mais affiche les erreurs dans une notification si fenêtre et fonction fournies.
  */
-function validatePythonSyntaxWithDisplay(code, browserWindow, messages = {}, showNotificationFn) {
+function validatePythonSyntaxWithDisplay(
+    code: string,
+    browserWindow: BrowserWindow | null,
+    messages: Record<string, string> = {},
+    showNotificationFn?: (win: BrowserWindow, msg: string) => void
+): PythonSyntaxIssue[] {
     const errors = validatePythonSyntax(code, messages);
     if (errors.length > 0 && browserWindow && typeof showNotificationFn === 'function') {
         const msg = { ...DEFAULT_VALIDATION_MESSAGES, ...messages };
         const errorLines = errors.map(e =>
             (msg.errorLine || 'Line {line}: {message}')
-                .replace('{line}', e.line)
+                .replace('{line}', String(e.line))
                 .replace('{message}', e.message)
         ).join('\n');
         const errorMsg = (msg.validationErrors || 'Errors detected:\n\n{errors}').replace('{errors}', errorLines);

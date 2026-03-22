@@ -1,35 +1,34 @@
 /**
- * @file paths.js
- * @description Application paths (portable, dev/prod). Resolves paths to Arduino CLI,
- * config file, sketch, locales, icon, preload and micro:bit folders.
- * Used by the Electron main process and lib/ modules.
+ * @file paths.ts
+ * @description Résolution des chemins applicatifs (développement vs exécutable packagé).
+ * Point d’entrée : répertoire du `package.json` / asar ; en prod, données utilisateur sous `data/` à côté de l’exe.
+ * Expose `PATHS` (Arduino CLI, YAML, sketch, locales, icône, preload, HEX micro:bit et cache).
+ * @remarks Pour un nouveau binaire ou dossier de données : ajouter un getter ici plutôt que des chemins en dur dans `index.ts`.
  * @module lib/paths
- * @author Sébastien Canet
- * @license CC0-1.0
+ * @author scanet\@libreduc.cc (Sébastien Canet)
+ * @license GPL-3.0
  */
 
 import { app } from 'electron';
 import path from 'node:path';
 import fs from 'fs';
-import { fileURLToPath } from 'node:url';
 import { isWindows } from './platform.js';
 
 /**
- * Indicates whether the application runs in development mode (unpackaged).
- * @returns {boolean} true if the app path does not contain "app.asar"
+ * Indique si l’app tourne en développement (hors asar), pour pointer vers les dossiers du dépôt.
  */
-function isDev() {
+function isDev(): boolean {
     return !app.getAppPath().includes('app.asar');
 }
 
-const directory = isDev() ? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..') : app.getAppPath();
+/** Project / app root (répertoire du package.json) — requis quand le point d’entrée est compilé dans out/ */
+const directory = app.getAppPath();
 const directoryAppAsar = isDev() ? directory : path.dirname(directory);
 
 /**
- * Returns the absolute path of the Arduino CLI executable (arduino-cli or arduino-cli.exe).
- * @returns {string} Resolved path to the executable
+ * Chemin absolu de l’exécutable Arduino CLI (`arduino-cli` / `arduino-cli.exe`) dans le dossier `arduino/` packagé ou à côté de l’exe.
  */
-function getArduinoCliExecutable() {
+function getArduinoCliExecutable(): string {
     let basePath;
     if (isDev()) {
         basePath = path.join(directoryAppAsar, 'arduino');
@@ -41,11 +40,10 @@ function getArduinoCliExecutable() {
 }
 
 /**
- * Path to an extra resource (arduino, microbit, assets) depending on the environment.
- * @param {string} resourceName - Folder name (e.g. 'arduino', 'microbit', 'assets')
- * @returns {string} Absolute path to the resource
+ * Chemin vers une ressource extra empaquetée (`arduino`, `microbit`, `assets`) : à côté de l’exe en prod, racine du projet en dev.
+ * @param resourceName - Nom du dossier à la racine des ressources
  */
-function getExtraResourcePath(resourceName) {
+function getExtraResourcePath(resourceName: string): string {
     if (isDev()) {
         return path.join(directoryAppAsar, resourceName);
     }
@@ -54,19 +52,18 @@ function getExtraResourcePath(resourceName) {
 }
 
 /**
- * Portable data directory (next to the executable in prod, or the project in dev).
- * Contains data/arduino/sketch, data/microbit-cache, debug.log, etc.
- * @returns {string} Path to the data directory
+ * Répertoire de données utilisateur portable : `data/` à côté de l’exe (prod) ou du projet (dev).
+ * Contient sketch Arduino, cache micro:bit, `config.json` de langue, `debug.log`, etc.
  */
-function getPortableDataDir() {
+function getPortableDataDir(): string {
     const appDir = isDev() ? directory : path.dirname(process.execPath);
     return path.join(appDir, 'data');
 }
 
 /**
- * Creates the portable data directory if it does not exist (recursive for parent dirs).
+ * Crée `data/` (et parents) s’il n’existe pas.
  */
-function ensurePortableDataDir() {
+function ensurePortableDataDir(): void {
     const dir = getPortableDataDir();
     if (!fs.existsSync(dir)) {
         fs.mkdirSync(dir, { recursive: true });

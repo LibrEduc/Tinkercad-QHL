@@ -90,7 +90,7 @@ Si c'est la première fois que vous utilisez l'application :
 
 ## 📄 Licence
 
-Ce projet est sous licence CC0-1.0 (Creative Commons Zero).
+Ce projet est sous licence **GNU General Public License v3.0** (GPL-3.0). Voir le fichier `LICENSE.txt` à la racine du dépôt.
 
 ## 🤝 Contribution
 
@@ -196,7 +196,7 @@ If this is the first time you're using the application:
 
 ## 📄 License
 
-This project is licensed under CC0-1.0 (Creative Commons Zero).
+This project is licensed under the **GNU General Public License v3.0** (GPL-3.0). See `LICENSE.txt` in the repository root.
 
 ## 🤝 Contributing
 

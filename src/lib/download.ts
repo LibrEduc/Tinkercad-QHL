@@ -1,10 +1,11 @@
 /**
- * @file download.js
- * @description HTTP/HTTPS download to file: follows 301/302/307/308 redirects,
- * optional progress callback (percent or bytes received). Used by arduino.js and index.js (micro:bit HEX).
+ * @file download.ts
+ * @description Téléchargement HTTP/HTTPS vers un fichier local : redirections 301/302/307/308,
+ * progression optionnelle (pourcentage si `Content-Length`, sinon octets reçus).
+ * Utilisé par `arduino` (archive CLI) et `index` (HEX micro:bit).
  * @module lib/download
- * @author Sébastien Canet
- * @license CC0-1.0
+ * @author scanet\@libreduc.cc (Sébastien Canet)
+ * @license GPL-3.0
  */
 
 import http from 'http';
@@ -16,14 +17,24 @@ import { safeUnlink, safeClose } from './utils.js';
 const PROGRESS_THROTTLE_PERCENT = 5;
 const PROGRESS_THROTTLE_MS = 800;
 
+export type DownloadProgress = {
+    percent: number | null;
+    received: number;
+    total: number | null;
+};
+
+export type DownloadToFileOptions = {
+    /** Appelé de façon limitée (anti-spam) pendant le transfert */
+    onProgress?: (p: DownloadProgress) => void;
+};
+
 /**
- * Downloads a file from a URL to destPath, with redirect following and optional progress.
- * @param {string} url - File URL (HTTP or HTTPS)
- * @param {string} destPath - Destination path on disk
- * @param {Object} [options] - Options. onProgress: function({ percent, received, total }) for progress (throttled)
- * @returns {Promise<void>} Resolves when write finishes, rejects on HTTP or network error
+ * Télécharge une ressource vers `destPath` ; suit les redirections ; annule proprement en cas d’erreur HTTP.
+ * @param url - URL HTTP ou HTTPS
+ * @param destPath - Fichier de destination (écrasé)
+ * @param options - `onProgress` pour barres / notifications
  */
-function downloadToFile(url, destPath, options = {}) {
+function downloadToFile(url: string, destPath: string, options: DownloadToFileOptions = {}): Promise<void> {
     const { onProgress } = options;
     return new Promise((resolve, reject) => {
         const download = (currentUrl, redirectCount = 0) => {
@@ -91,7 +102,7 @@ function downloadToFile(url, destPath, options = {}) {
                     file.end(() => {
                         file.close(() => {
                             reportProgress(true);
-                            resolve();
+                            resolve(undefined);
                         });
                     });
                 });

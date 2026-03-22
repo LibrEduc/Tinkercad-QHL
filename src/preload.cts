@@ -1,4 +1,3 @@
-"use strict";
 /**
  * @file preload.cts
  * @description Script **preload** Electron compilé en **CommonJS** (`preload.cjs`) : le chargement preload
@@ -9,8 +8,9 @@
  * @author scanet\@libreduc.cc (Sébastien Canet)
  * @license GPL-3.0
  */
-Object.defineProperty(exports, "__esModule", { value: true });
+
 const { contextBridge, ipcRenderer } = require('electron');
+
 /** API disponible dans le renderer (`window.api`) : pont typé vers le processus principal. */
 contextBridge.exposeInMainWorld('api', {
     closeWindow: () => ipcRenderer.send('close-library-dialog'),
@@ -23,8 +23,7 @@ contextBridge.exposeInMainWorld('api', {
     getTranslation: async (key) => {
         try {
             return await ipcRenderer.invoke('get-translation', key);
-        }
-        catch (error) {
+        } catch (error) {
             console.error('Translation error:', error);
             return key;
         }
@@ -40,8 +39,7 @@ contextBridge.exposeInMainWorld('api', {
     getIconPaths: async () => {
         try {
             return await ipcRenderer.invoke('get-icon-paths');
-        }
-        catch (error) {
+        } catch (error) {
             console.error('Error getting icon paths:', error);
             return { arduino: null, microbit: null };
         }

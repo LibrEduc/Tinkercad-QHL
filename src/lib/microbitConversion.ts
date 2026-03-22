@@ -1,31 +1,27 @@
 /**
- * @file microbitConversion.js
- * @description MakeCode Python → standard MicroPython conversion: basic.*, input.*, pins.*, music.*,
- * radio.*, event handlers (buttons, gestures, logo, basic.forever). Uses REGEX_MAKECODE and ICON_MAP.
- * Exposes isMakeCodePython, convertMakeCodeToMicroPython and helpers.
+ * @file microbitConversion.ts
+ * @description Conversion du dialecte MakeCode Python (blocs `basic`, `input`, `pins`, `music`, `radio`, événements)
+ * vers du MicroPython « classique » pour la carte micro:bit. S’appuie sur `REGEX_MAKECODE` et `ICON_MAP`.
+ * @remarks Pour une nouvelle API MakeCode : ajouter une regex et une passe de remplacement ; tester avec un sketch minimal.
  * @module lib/microbitConversion
- * @author Sébastien Canet
- * @license CC0-1.0
+ * @author scanet\@libreduc.cc (Sébastien Canet)
+ * @license GPL-3.0
  */
 
 import { REGEX_MAKECODE, PWM_DUTY_CYCLE, MAKECODE_PATTERNS } from './constants.js';
 
 /**
- * Replaces tabs with 4 spaces throughout the code.
- * @param {string} code - Source code
- * @returns {string}
+ * Remplace les tabulations par 4 espaces pour un rendu cohérent avant les regex.
  */
-function normalizeCodeIndentation(code) {
+function normalizeCodeIndentation(code: string): string {
     const lines = code.split('\n');
     return lines.map(line => line.replace(/\t/g, '    ')).join('\n');
 }
 
 /**
- * Adds "from microbit import *" if missing, then import struct/music/radio as needed.
- * @param {string} code - Code after base conversions
- * @returns {string}
+ * Ajoute `from microbit import *` si besoin, puis `struct` / `music` / `radio` selon les usages détectés.
  */
-function addMicrobitImports(code) {
+function addMicrobitImports(code: string): string {
     let converted = code;
     if (!converted.includes('from microbit import')) {
         converted = 'from microbit import *\n\n' + converted;
@@ -45,7 +41,8 @@ function addMicrobitImports(code) {
     return converted;
 }
 
-function convertBasicFunctions(code, iconMap) {
+/** Remplace affichages, chaînes, pause MakeCode par les appels `display.*` / `sleep` MicroPython. */
+function convertBasicFunctions(code: string, iconMap: Record<string, string>): string {
     let converted = code;
     converted = converted.replace(REGEX_MAKECODE.showIcon, (match, iconName) => {
         const microPythonIcon = iconMap[iconName] || iconName.toUpperCase();
@@ -60,7 +57,8 @@ function convertBasicFunctions(code, iconMap) {
     return converted;
 }
 
-function convertInputFunctions(code) {
+/** Boutons, accéléromètre, boussole, température MakeCode → API micro:bit. */
+function convertInputFunctions(code: string): string {
     let converted = code;
     converted = converted.replace(REGEX_MAKECODE.buttonIsPressed, (match, button) => {
         const buttonName = button.toLowerCase() === 'a' ? 'button_a' : 'button_b';
@@ -75,7 +73,8 @@ function convertInputFunctions(code) {
     return converted;
 }
 
-function convertPinFunctions(code) {
+/** Broches numériques / analogiques MakeCode → `pinN.*` MicroPython. */
+function convertPinFunctions(code: string): string {
     let converted = code;
     converted = converted.replace(REGEX_MAKECODE.digitalWritePin, (match, pin, value) => {
         return `pin${pin}.write_digital(${value})`;
@@ -92,7 +91,8 @@ function convertPinFunctions(code) {
     return converted;
 }
 
-function convertMusicAndRadioFunctions(code) {
+/** Musique et radio MakeCode → modules `music` / `radio` + `struct` pour les paquets binaires. */
+function convertMusicAndRadioFunctions(code: string): string {
     let converted = code;
     converted = converted.replace(REGEX_MAKECODE.playTone, 'music.pitch($1, $2)');
     converted = converted.replace(REGEX_MAKECODE.stopAllSounds, 'music.stop()');
@@ -104,7 +104,8 @@ function convertMusicAndRadioFunctions(code) {
     return converted;
 }
 
-function convertAnalogPitch(code) {
+/** Remplace `pins.analog_pitch` par réglage de période PWM + `write_analog` (duty fixe). */
+function convertAnalogPitch(code: string): string {
     if (!REGEX_MAKECODE.analogPitch.test(code)) {
         return code;
     }
@@ -130,7 +131,12 @@ function convertAnalogPitch(code) {
     return analogPitchLines.join('\n');
 }
 
-function collectEventHandlers(code) {
+/** Extrait gestionnaires boutons / gestes / logo / boucle `forever` pour les réinjecter dans une boucle `while True`. */
+function collectEventHandlers(code: string): {
+    code: string;
+    buttonHandlers: Array<{ button?: string; gesture?: string; func: string }>;
+    foreverFuncName: string | null;
+} {
     const buttonHandlers = [];
     const gestureHandlers = [];
     const logoTouchHandlers = [];
@@ -158,7 +164,12 @@ function collectEventHandlers(code) {
     return { code, buttonHandlers, foreverFuncName };
 }
 
-function integrateEventHandlers(code, buttonHandlers, foreverFuncName) {
+/** Réinsère les gestionnaires collectés dans une boucle principale (`while True`) ou crée cette boucle. */
+function integrateEventHandlers(
+    code: string,
+    buttonHandlers: Array<{ button?: string; gesture?: string; func: string }>,
+    foreverFuncName: string | null
+): string {
     if (buttonHandlers.length === 0 && !foreverFuncName) {
         return code;
     }
@@ -257,6 +268,7 @@ function integrateEventHandlers(code, buttonHandlers, foreverFuncName) {
     return code;
 }
 
+/** Correspondance noms d’icônes MakeCode (`IconNames.*`) → constantes `Image.*` MicroPython. */
 const ICON_MAP = {
     'Heart': 'HEART',
     'SmallHeart': 'HEART_SMALL',
@@ -317,20 +329,16 @@ const ICON_MAP = {
 };
 
 /**
- * Detects whether the code contains MakeCode patterns (basic., IconNames., input.on_, etc.).
- * @param {string} code - Source code
- * @returns {boolean} true if at least one MAKECODE_PATTERNS is present
+ * Indique si le code ressemble à du MakeCode Python (présence d’au moins un motif dans `MAKECODE_PATTERNS`).
  */
-function isMakeCodePython(code) {
+function isMakeCodePython(code: string): boolean {
     return MAKECODE_PATTERNS.some(pattern => code.includes(pattern));
 }
 
 /**
- * Converts MakeCode Python code to standard MicroPython (indentation, imports, basic/input/pins/music/radio, events).
- * @param {string} code - MakeCode Python code
- * @returns {string} MicroPython code ready for micro:bit
+ * Pipeline complet de conversion MakeCode → MicroPython (imports, passes regex, gestionnaires d’événements).
  */
-function convertMakeCodeToMicroPython(code) {
+function convertMakeCodeToMicroPython(code: string): string {
     let converted = code.trim().replace(/\r\n/g, '\n').replace(/\r/g, '\n');
     converted = normalizeCodeIndentation(converted);
     converted = addMicrobitImports(converted);
