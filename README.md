@@ -17,6 +17,7 @@ Tinkercad QHL (Quasi Hors Ligne) est une application qui permet d'utiliser Tinke
 - **Installation de bibliothèques** : Installez des bibliothèques Arduino directement depuis l'application
 - **Multilingue** : Support du français et de l'anglais avec détection automatique de la langue du système
 - **Installation du compilateur** : Installation automatique du compilateur Arduino AVR si nécessaire
+- **micro:bit** : Détection des cartes, conversion MakeCode → MicroPython, génération HEX et téléversement
 
 ## 📖 Utilisation
 
@@ -58,26 +59,41 @@ Si c'est la première fois que vous utilisez l'application :
 
 ## 🏗️ Structure du projet (maintenance)
 
-- **`index.js`** : Processus principal Electron — IPC, fenêtre, état (ports, micro:bit), orchestration. En-tête du fichier décrit les blocs de lignes.
-- **`lib/`** :
-  - **`paths.js`** : Chemins app (dev/prod), Arduino CLI, micro:bit, locales.
-  - **`constants.js`** : Constantes (délais, regex MakeCode, noms fichiers).
-  - **`platform.js`** : Détection Windows / macOS / Linux.
-  - **`logger.js`** : Logs console + fichier (si `TINKERCAD_DEBUG=1`).
-  - **`notifications.js`** : Affichage des notifications dans la fenêtre.
-  - **`arduino.js`** : Arduino CLI (commandes, téléchargement, compilation, téléversement).
-  - **`codeExtraction.js`** : Extraction du code depuis l’éditeur Tinkercad (webview).
-  - **`microbitConversion.js`** : Conversion MakeCode Python → MicroPython.
-  - **`pythonUtils.js`** : Nettoyage du code Python, validation syntaxe.
-  - **`menu.js`** : Construction du menu (Fichier, Arduino, micro:bit, Affichage, Aide) à partir d’un contexte.
-  - **`download.js`** : Téléchargement HTTP/HTTPS avec progression optionnelle.
-  - **`github.js`** : URLs des releases (Arduino CLI, HEX micro:bit).
-  - **`updates.js`** : Vérification des mises à jour.
-  - **`fileCache.js`** : Cache d’existence de fichiers (éviction FIFO, TTL).
-  - **`utils.js`** : Utilitaires partagés (safeUnlink, safeClose).
-- **`locales/`** : Traductions (fr.json, en.json). Clés utilisées par `index.js` et `menu.js`.
+Les sources sont en **TypeScript** dans `src/`, compilées vers `out/` (`npm run compile`). Au runtime, Electron charge `out/index.js` (champ `"main"` du `package.json`).
+
+- **`src/index.ts`** : processus principal — IPC, fenêtre, état (ports, micro:bit), orchestration.
+- **`src/preload.cts`** : script preload (compilé en `preload.cjs`) — pont sécurisé `contextBridge` vers la page.
+- **`src/debug-mode.ts`** : indicateur de build debug (voir `npm run build:win:debug`).
+- **`src/lib/`** :
+  - **`paths.ts`** : Chemins app (dev/prod), Arduino CLI, micro:bit, locales.
+  - **`constants.ts`** : Constantes (délais, regex MakeCode, noms fichiers).
+  - **`platform.ts`** : Détection Windows / macOS / Linux.
+  - **`logger.ts`** : Logs console + fichier (si `TINKERCAD_DEBUG=1`).
+  - **`notifications.ts`** : Notifications dans la fenêtre Tinkercad.
+  - **`arduino.ts`** : Arduino CLI (commandes, téléchargement, compilation, téléversement).
+  - **`boardDetection.ts`** : Analyse de `arduino-cli board list`, filtrage micro:bit.
+  - **`codeExtraction.ts`** : Extraction du code depuis l’éditeur (webview).
+  - **`microbitConversion.ts`** : Conversion MakeCode Python → MicroPython.
+  - **`pythonUtils.ts`** : Nettoyage du code Python, validation syntaxe.
+  - **`menu.ts`** : construction du menu (Fichier, Arduino, micro:bit, Affichage, Aide) à partir d’un contexte.
+  - **`download.ts`** : Téléchargement HTTP/HTTPS avec progression optionnelle.
+  - **`github.ts`** : API GitHub (releases Arduino CLI, HEX micro:bit, version de l’app).
+  - **`updates.ts`** : Vérification des mises à jour.
+  - **`fileCache.ts`** : Cache d’existence de fichiers (éviction FIFO, TTL).
+  - **`utils.ts`** : Utilitaires partagés (safeUnlink, safeClose).
+- **`locales/`** : Traductions (fr.json, en.json). Clés utilisées par `index.ts` et `menu.ts`.
 - **Modifier une chaîne affichée** : chercher la clé dans `locales/fr.json` ou `locales/en.json`.
-- **Modifier le menu** : `lib/menu.js` (template) ; le contexte est fourni par `getMenuContext()` dans `index.js`.
+- **Modifier le menu** : `src/lib/menu.ts` ; le contexte est fourni par `getMenuContext()` dans `src/index.ts`.
+
+### Développement
+
+| Commande | Rôle |
+|----------|------|
+| `npm run compile` | Transpile TypeScript (`src/` → `out/`) + preload |
+| `npm start` | Compile puis lance l’application Electron |
+| `npm run compile:watch` | Watch mode TypeScript |
+| `npm test` | Tests unitaires (après compilation) |
+| `npm run docs` | Génère la documentation API (TypeDoc) dans `docs/` |
 
 ## 📝 Notes importantes
 
@@ -123,6 +139,7 @@ Tinkercad QHL ('Quasi Hors Ligne', french Almost Offline), is an application tha
 - **Library Installation** : Install Arduino libraries directly from the application
 - **Multilingual** : Support for French and English with automatic system language detection
 - **Compiler Installation** : Automatic installation of Arduino AVR compiler if needed
+- **micro:bit** : Board detection, MakeCode → MicroPython conversion, HEX generation and flashing
 
 ## 📖 Usage
 
@@ -164,26 +181,41 @@ If this is the first time you're using the application:
 
 ## 🏗️ Project structure (maintenance)
 
-- **`index.js`** : Electron main process — IPC, window, state (ports, micro:bit), orchestration. File header describes line blocks.
-- **`lib/`** :
-  - **`paths.js`** : App paths (dev/prod), Arduino CLI, micro:bit, locales.
-  - **`constants.js`** : Constants (intervals, MakeCode regex, file names).
-  - **`platform.js`** : Windows / macOS / Linux detection.
-  - **`logger.js`** : Console and optional file logging (`TINKERCAD_DEBUG=1`).
-  - **`notifications.js`** : In-window notifications.
-  - **`arduino.js`** : Arduino CLI (commands, download, compile, upload).
-  - **`codeExtraction.js`** : Code extraction from Tinkercad editor (webview).
-  - **`microbitConversion.js`** : MakeCode Python → MicroPython conversion.
-  - **`pythonUtils.js`** : Python code cleaning and syntax validation.
-  - **`menu.js`** : Menu building (File, Arduino, micro:bit, View, Help) from a context object.
-  - **`download.js`** : HTTP/HTTPS download with optional progress.
-  - **`github.js`** : Release URLs (Arduino CLI, micro:bit HEX).
-  - **`updates.js`** : Update check.
-  - **`fileCache.js`** : File existence cache (FIFO eviction, TTL).
-  - **`utils.js`** : Shared helpers (safeUnlink, safeClose).
-- **`locales/`** : Translations (fr.json, en.json). Keys used by `index.js` and `menu.js`.
+Sources are **TypeScript** under `src/`, compiled to `out/` (`npm run compile`). At runtime Electron loads `out/index.js` (the `"main"` field in `package.json`).
+
+- **`src/index.ts`** : Main process — IPC, window, state (ports, micro:bit), orchestration.
+- **`src/preload.cts`** : Preload script (compiled to `preload.cjs`) — `contextBridge` to the page.
+- **`src/debug-mode.ts`** : Debug build flag (see `npm run build:win:debug`).
+- **`src/lib/`** :
+  - **`paths.ts`** : App paths (dev/prod), Arduino CLI, micro:bit, locales.
+  - **`constants.ts`** : Constants (intervals, MakeCode regex, file names).
+  - **`platform.ts`** : Windows / macOS / Linux detection.
+  - **`logger.ts`** : Console and optional file logging (`TINKERCAD_DEBUG=1`).
+  - **`notifications.ts`** : In-window notifications.
+  - **`arduino.ts`** : Arduino CLI (commands, download, compile, upload).
+  - **`boardDetection.ts`** : Parses `arduino-cli board list`, filters micro:bit ports.
+  - **`codeExtraction.ts`** : Code extraction from the Tinkercad editor (webview).
+  - **`microbitConversion.ts`** : MakeCode Python → MicroPython conversion.
+  - **`pythonUtils.ts`** : Python code cleaning and syntax validation.
+  - **`menu.ts`** : Menu building (File, Arduino, micro:bit, View, Help) from a context object.
+  - **`download.ts`** : HTTP/HTTPS download with optional progress.
+  - **`github.ts`** : GitHub API (Arduino CLI releases, micro:bit HEX, app version).
+  - **`updates.ts`** : Update check.
+  - **`fileCache.ts`** : File existence cache (FIFO eviction, TTL).
+  - **`utils.ts`** : Shared helpers (safeUnlink, safeClose).
+- **`locales/`** : Translations (fr.json, en.json). Keys used by `index.ts` and `menu.ts`.
 - **To change a displayed string** : look up the key in `locales/fr.json` or `locales/en.json`.
-- **To change the menu** : edit `lib/menu.js` (template); context is provided by `getMenuContext()` in `index.js`.
+- **To change the menu** : edit `src/lib/menu.ts`; context is provided by `getMenuContext()` in `src/index.ts`.
+
+### Development
+
+| Command | Purpose |
+|---------|---------|
+| `npm run compile` | Transpile TypeScript (`src/` → `out/`) + preload |
+| `npm start` | Compile then launch Electron |
+| `npm run compile:watch` | TypeScript watch mode |
+| `npm test` | Unit tests (after compile) |
+| `npm run docs` | Generate API documentation (TypeDoc) into `docs/` |
 
 ## 📝 Important Notes
 
