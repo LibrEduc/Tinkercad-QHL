@@ -23,7 +23,7 @@
   "license": "GPL-3.0",
   "type": "module",
   "description": "Application desktop Tinkercad QHL — compilation et téléversement Arduino et micro:bit",
-  "repository": "github:LibrEduc/TinkercadOffline",
+  "repository": "github:LibrEduc/Tinkercad-QHL",
   "devDependencies": {
     "@types/node": "^25.5.0",
     "cross-env": "^10.1.0",
